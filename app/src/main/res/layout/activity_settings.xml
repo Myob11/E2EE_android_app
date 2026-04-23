@@ -58,20 +58,16 @@
                     style="@style/Widget.AppCompat.Button.Borderless.Colored" />
             </RelativeLayout>
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/textInputLayoutDisplayName"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            <TextView
+                android:id="@+id/textViewUsernameDisplay"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:hint="Display Name">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/editTextDisplayName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Your Name" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:textAlignment="center"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                tools:text="username_placeholder" />
 
             <View
                 android:layout_width="match_parent"

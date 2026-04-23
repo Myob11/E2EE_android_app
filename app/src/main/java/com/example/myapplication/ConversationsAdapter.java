@@ -11,11 +11,13 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
+import java.util.ArrayList;
 import java.util.List;
 
 public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdapter.ViewHolder> {
 
     private List<Conversation> conversations;
+    private List<Conversation> filteredList;
     private OnConversationClickListener listener;
 
     public interface OnConversationClickListener {
@@ -24,7 +26,29 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
 
     public ConversationsAdapter(List<Conversation> conversations, OnConversationClickListener listener) {
         this.conversations = conversations;
+        this.filteredList = new ArrayList<>(conversations);
         this.listener = listener;
+    }
+
+    public void updateData(List<Conversation> newList) {
+        this.conversations = newList;
+        this.filteredList = new ArrayList<>(newList);
+        notifyDataSetChanged();
+    }
+
+    public void filter(String query) {
+        filteredList.clear();
+        if (query.isEmpty()) {
+            filteredList.addAll(conversations);
+        } else {
+            String lowerCaseQuery = query.toLowerCase().trim();
+            for (Conversation conv : conversations) {
+                if (conv.getContactName().toLowerCase().contains(lowerCaseQuery)) {
+                    filteredList.add(conv);
+                }
+            }
+        }
+        notifyDataSetChanged();
     }
 
     @NonNull
@@ -36,7 +60,7 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        Conversation conversation = conversations.get(position);
+        Conversation conversation = filteredList.get(position);
         Context context = holder.itemView.getContext();
         
         holder.name.setText(conversation.getContactName());
@@ -47,13 +71,11 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         if (conversation.isUnread()) {
             holder.name.setTypeface(null, Typeface.BOLD);
             holder.lastMessage.setTypeface(null, Typeface.BOLD);
-            
             context.getTheme().resolveAttribute(android.R.attr.textColorPrimary, typedValue, true);
             holder.lastMessage.setTextColor(typedValue.data);
         } else {
             holder.name.setTypeface(null, Typeface.NORMAL);
             holder.lastMessage.setTypeface(null, Typeface.NORMAL);
-            
             context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
             holder.lastMessage.setTextColor(typedValue.data);
         }
@@ -73,7 +95,7 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
 
     @Override
     public int getItemCount() {
-        return conversations.size();
+        return filteredList.size();
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

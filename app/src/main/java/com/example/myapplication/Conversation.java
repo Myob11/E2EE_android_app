@@ -1,6 +1,8 @@
 package com.example.myapplication;
 
 public class Conversation {
+    private String chatId;
+    private String targetUserId;
     private String contactName;
     private String lastMessage;
     private String time;
@@ -14,6 +16,12 @@ public class Conversation {
         this.imageUrl = imageUrl;
         this.isUnread = isUnread;
     }
+
+    public String getChatId() { return chatId; }
+    public void setChatId(String chatId) { this.chatId = chatId; }
+    
+    public String getTargetUserId() { return targetUserId; }
+    public void setTargetUserId(String targetUserId) { this.targetUserId = targetUserId; }
 
     public String getContactName() { return contactName; }
     public String getLastMessage() { return lastMessage; }
