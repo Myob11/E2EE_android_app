@@ -6,7 +6,10 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -14,6 +17,7 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     private static final int TYPE_RECEIVED = 2;
 
     private List<Message> messages;
+    private SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
 
     public MessagesAdapter(List<Message> messages) {
         this.messages = messages;
@@ -43,10 +47,14 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Message message = messages.get(position);
+        String timeStr = timeFormat.format(new Date(message.getTimestamp()));
+        
         if (holder instanceof SentViewHolder) {
             ((SentViewHolder) holder).messageText.setText(message.getContent());
+            ((SentViewHolder) holder).timeText.setText(timeStr);
         } else {
             ((ReceivedViewHolder) holder).messageText.setText(message.getContent());
+            ((ReceivedViewHolder) holder).timeText.setText(timeStr);
         }
     }
 
@@ -56,18 +64,20 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     }
 
     static class SentViewHolder extends RecyclerView.ViewHolder {
-        TextView messageText;
+        TextView messageText, timeText;
         SentViewHolder(View itemView) {
             super(itemView);
             messageText = itemView.findViewById(R.id.textViewMessageSent);
+            timeText = itemView.findViewById(R.id.textViewTimeSent);
         }
     }
 
     static class ReceivedViewHolder extends RecyclerView.ViewHolder {
-        TextView messageText;
+        TextView messageText, timeText;
         ReceivedViewHolder(View itemView) {
             super(itemView);
             messageText = itemView.findViewById(R.id.textViewMessageReceived);
+            timeText = itemView.findViewById(R.id.textViewTimeReceived);
         }
     }
 }
