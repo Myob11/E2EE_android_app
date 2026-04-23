@@ -8,6 +8,7 @@ public class Conversation {
     private String time;
     private String imageUrl;
     private boolean isUnread;
+    private String lastMessageTime; // Raw ISO timestamp for sorting
 
     public Conversation(String contactName, String lastMessage, String time, String imageUrl, boolean isUnread) {
         this.contactName = contactName;
@@ -37,4 +38,7 @@ public class Conversation {
 
     public boolean isUnread() { return isUnread; }
     public void setUnread(boolean unread) { isUnread = unread; }
+
+    public String getLastMessageTime() { return lastMessageTime; }
+    public void setLastMessageTime(String lastMessageTime) { this.lastMessageTime = lastMessageTime; }
 }

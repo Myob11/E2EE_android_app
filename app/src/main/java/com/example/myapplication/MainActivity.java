@@ -152,7 +152,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
             public void onResponse(Call<List<Chat>> call, Response<List<Chat>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     List<Chat> chats = response.body();
-                    Collections.sort(chats, (c1, c2) -> c2.getCreatedAt().compareTo(c1.getCreatedAt()));
 
                     chatConversations.clear();
                     friendToChatId.clear();
@@ -183,13 +182,14 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                         Conversation conv = new Conversation(name, "No messages yet", "", "https://i.pravatar.cc/150?u=" + name, false);
                         conv.setChatId(chat.getId());
                         conv.setTargetUserId(targetId);
+                        // Initialize with chat creation time as fallback for sorting
+                        conv.setLastMessageTime(chat.getCreatedAt());
                         chatConversations.add(conv);
                         
                         fetchLastMessage(conv);
                     }
-                    if (!isSearching) {
-                        adapter.updateData(chatConversations);
-                    }
+                    
+                    sortAndDisplayChats();
                 }
             }
 
@@ -208,13 +208,9 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                 if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
                     MessageResponse lastMsg = response.body().get(0);
                     conv.setLastMessage(lastMsg.getCiphertext());
+                    conv.setLastMessageTime(lastMsg.getCreatedAt());
                     
-                    // Logic for unread: use is_read from backend
-                    // If I am NOT the sender and is_read is false, it's unread
-                    boolean isMe = lastMsg.getSenderId().equals(Prefs.getUserId());
-                    conv.setUnread(!isMe && !lastMsg.isRead()); 
-                    
-                    adapter.notifyDataSetChanged();
+                    sortAndDisplayChats();
                 }
             }
 
@@ -222,6 +218,22 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
             public void onFailure(Call<List<MessageResponse>> call, Throwable t) {
             }
         });
+    }
+
+    private void sortAndDisplayChats() {
+        // Sort descending: newest (highest timestamp) at the top
+        Collections.sort(chatConversations, (c1, c2) -> {
+            String t1 = c1.getLastMessageTime();
+            String t2 = c2.getLastMessageTime();
+            if (t1 == null && t2 == null) return 0;
+            if (t1 == null) return 1;
+            if (t2 == null) return -1;
+            return t2.compareTo(t1);
+        });
+        
+        if (!isSearching) {
+            adapter.updateData(chatConversations);
+        }
     }
 
     @Override
