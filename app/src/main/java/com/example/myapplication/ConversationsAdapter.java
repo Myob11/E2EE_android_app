@@ -67,18 +67,13 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         holder.lastMessage.setText(conversation.getLastMessage());
         holder.time.setText(conversation.getTime());
         
+        // Removed bolding logic - always normal typeface
+        holder.name.setTypeface(null, Typeface.NORMAL);
+        holder.lastMessage.setTypeface(null, Typeface.NORMAL);
+        
         TypedValue typedValue = new TypedValue();
-        if (conversation.isUnread()) {
-            holder.name.setTypeface(null, Typeface.BOLD);
-            holder.lastMessage.setTypeface(null, Typeface.BOLD);
-            context.getTheme().resolveAttribute(android.R.attr.textColorPrimary, typedValue, true);
-            holder.lastMessage.setTextColor(typedValue.data);
-        } else {
-            holder.name.setTypeface(null, Typeface.NORMAL);
-            holder.lastMessage.setTypeface(null, Typeface.NORMAL);
-            context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
-            holder.lastMessage.setTextColor(typedValue.data);
-        }
+        context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
+        holder.lastMessage.setTextColor(typedValue.data);
         
         Glide.with(context)
                 .load(conversation.getImageUrl())
@@ -87,8 +82,6 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
                 .into(holder.profileImage);
         
         holder.itemView.setOnClickListener(v -> {
-            conversation.setUnread(false);
-            notifyItemChanged(position);
             listener.onConversationClick(conversation);
         });
     }
