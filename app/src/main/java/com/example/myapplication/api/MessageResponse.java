@@ -7,6 +7,7 @@ public class MessageResponse {
     private String ciphertext;
     private String message_type;
     private String created_at;
+    private boolean is_read;
 
     public String getId() { return id; }
     public String getChatId() { return chat_id; }
@@ -14,4 +15,6 @@ public class MessageResponse {
     public String getCiphertext() { return ciphertext; }
     public String getMessageType() { return message_type; }
     public String getCreatedAt() { return created_at; }
+    public boolean isRead() { return is_read; }
+    public void setRead(boolean read) { is_read = read; }
 }

@@ -39,5 +39,13 @@ public interface ApiService {
     Call<MessageResponse> sendMessage(@Header("Authorization") String token, @Path("chat_id") String chatId, @Body MessageRequest request);
 
     @GET("/api/chats/{chat_id}/messages")
-    Call<List<MessageResponse>> getMessages(@Header("Authorization") String token, @Path("chat_id") String chatId);
+    Call<List<MessageResponse>> getMessages(
+            @Header("Authorization") String token,
+            @Path("chat_id") String chatId,
+            @Query("limit") Integer limit,
+            @Query("before") String before
+    );
+
+    @POST("/api/messages/{message_id}/read")
+    Call<Map<String, Object>> markAsRead(@Header("Authorization") String token, @Path("message_id") String messageId);
 }

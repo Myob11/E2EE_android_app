@@ -24,9 +24,17 @@ public class Conversation {
     public void setTargetUserId(String targetUserId) { this.targetUserId = targetUserId; }
 
     public String getContactName() { return contactName; }
+    public void setContactName(String contactName) { this.contactName = contactName; }
+
     public String getLastMessage() { return lastMessage; }
+    public void setLastMessage(String lastMessage) { this.lastMessage = lastMessage; }
+
     public String getTime() { return time; }
+    public void setTime(String time) { this.time = time; }
+
     public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+
     public boolean isUnread() { return isUnread; }
     public void setUnread(boolean unread) { isUnread = unread; }
 }

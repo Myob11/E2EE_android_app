@@ -18,18 +18,33 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     private List<Message> messages;
     private SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+    private int lastSentMessagePosition = -1;
 
     public MessagesAdapter(List<Message> messages) {
         this.messages = messages;
+        updateLastSentPosition();
+    }
+
+    public void updateMessages(List<Message> newMessages) {
+        this.messages = newMessages;
+        updateLastSentPosition();
+        notifyDataSetChanged();
+    }
+
+    private void updateLastSentPosition() {
+        lastSentMessagePosition = -1;
+        // The status (Read/Sent) should only show under the very last message I sent in the conversation
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if (messages.get(i).isSentByMe()) {
+                lastSentMessagePosition = i;
+                break;
+            }
+        }
     }
 
     @Override
     public int getItemViewType(int position) {
-        if (messages.get(position).isSentByMe()) {
-            return TYPE_SENT;
-        } else {
-            return TYPE_RECEIVED;
-        }
+        return messages.get(position).isSentByMe() ? TYPE_SENT : TYPE_RECEIVED;
     }
 
     @NonNull
@@ -50,11 +65,27 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         String timeStr = timeFormat.format(new Date(message.getTimestamp()));
         
         if (holder instanceof SentViewHolder) {
-            ((SentViewHolder) holder).messageText.setText(message.getContent());
-            ((SentViewHolder) holder).timeText.setText(timeStr);
+            SentViewHolder sentHolder = (SentViewHolder) holder;
+            sentHolder.messageText.setText(message.getContent());
+            sentHolder.timeText.setText(timeStr);
+            
+            // Display "Read" or "Sent" only for the most recent message sent by the user
+            if (position == lastSentMessagePosition) {
+                sentHolder.statusText.setVisibility(View.VISIBLE);
+                if (message.isRead()) {
+                    sentHolder.statusText.setText("Read");
+                    sentHolder.statusText.setTextColor(sentHolder.itemView.getContext().getResources().getColor(R.color.primary));
+                } else {
+                    sentHolder.statusText.setText("Sent");
+                    sentHolder.statusText.setTextColor(sentHolder.itemView.getContext().getResources().getColor(android.R.color.darker_gray));
+                }
+            } else {
+                sentHolder.statusText.setVisibility(View.GONE);
+            }
         } else {
-            ((ReceivedViewHolder) holder).messageText.setText(message.getContent());
-            ((ReceivedViewHolder) holder).timeText.setText(timeStr);
+            ReceivedViewHolder receivedHolder = (ReceivedViewHolder) holder;
+            receivedHolder.messageText.setText(message.getContent());
+            receivedHolder.timeText.setText(timeStr);
         }
     }
 
@@ -64,11 +95,12 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     }
 
     static class SentViewHolder extends RecyclerView.ViewHolder {
-        TextView messageText, timeText;
+        TextView messageText, timeText, statusText;
         SentViewHolder(View itemView) {
             super(itemView);
             messageText = itemView.findViewById(R.id.textViewMessageSent);
             timeText = itemView.findViewById(R.id.textViewTimeSent);
+            statusText = itemView.findViewById(R.id.textViewStatus);
         }
     }
 

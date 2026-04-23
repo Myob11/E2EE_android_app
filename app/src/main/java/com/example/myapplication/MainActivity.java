@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -11,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.appcompat.widget.SearchView;
 import com.example.myapplication.api.Chat;
+import com.example.myapplication.api.MessageResponse;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.api.User;
 import com.example.myapplication.util.Prefs;
@@ -31,6 +33,7 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
     private List<User> friendsList = new ArrayList<>();
     private Map<String, String> friendNames = new HashMap<>();
     private Map<String, String> friendToChatId = new HashMap<>();
+    private boolean isSearching = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,6 +53,14 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         recyclerView.setAdapter(adapter);
 
         SearchView searchView = findViewById(R.id.searchView);
+        
+        searchView.setOnQueryTextFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                isSearching = true;
+                performSearch("");
+            }
+        });
+
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
@@ -59,36 +70,51 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                performSearch(newText);
+                if (isSearching) {
+                    performSearch(newText);
+                }
                 return true;
             }
         });
+
+        int closeButtonId = searchView.getContext().getResources().getIdentifier("android:id/search_close_btn", null, null);
+        View closeButton = searchView.findViewById(closeButtonId);
+        if (closeButton != null) {
+            closeButton.setOnClickListener(v -> {
+                searchView.setQuery("", false);
+                searchView.clearFocus();
+                isSearching = false;
+                adapter.updateData(chatConversations);
+            });
+        }
     }
 
     private void performSearch(String query) {
-        if (query.isEmpty()) {
-            adapter.updateData(chatConversations);
-        } else {
-            List<Conversation> searchResults = new ArrayList<>();
-            String lowerQuery = query.toLowerCase().trim();
-            for (User friend : friendsList) {
-                if (friend.getUsername().toLowerCase().contains(lowerQuery)) {
-                    Conversation conv = new Conversation(friend.getUsername(), "Tap to chat", "", "https://i.pravatar.cc/150?u=" + friend.getUsername(), false);
-                    conv.setTargetUserId(friend.getId());
-                    if (friendToChatId.containsKey(friend.getId())) {
-                        conv.setChatId(friendToChatId.get(friend.getId()));
-                    }
-                    searchResults.add(conv);
+        List<User> sortedFriends = new ArrayList<>(friendsList);
+        Collections.sort(sortedFriends, (u1, u2) -> u1.getUsername().compareToIgnoreCase(u2.getUsername()));
+
+        List<Conversation> searchResults = new ArrayList<>();
+        String lowerQuery = query.toLowerCase().trim();
+
+        for (User friend : sortedFriends) {
+            if (lowerQuery.isEmpty() || friend.getUsername().toLowerCase().contains(lowerQuery)) {
+                Conversation conv = new Conversation(friend.getUsername(), "Tap to chat", "", "https://i.pravatar.cc/150?u=" + friend.getUsername(), false);
+                conv.setTargetUserId(friend.getId());
+                if (friendToChatId.containsKey(friend.getId())) {
+                    conv.setChatId(friendToChatId.get(friend.getId()));
                 }
+                searchResults.add(conv);
             }
-            adapter.updateData(searchResults);
         }
+        adapter.updateData(searchResults);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        loadData();
+        if (!isSearching) {
+            loadData();
+        }
     }
 
     private void loadData() {
@@ -126,8 +152,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
             public void onResponse(Call<List<Chat>> call, Response<List<Chat>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     List<Chat> chats = response.body();
-                    
-                    // Sort descending by created_at
                     Collections.sort(chats, (c1, c2) -> c2.getCreatedAt().compareTo(c1.getCreatedAt()));
 
                     chatConversations.clear();
@@ -156,21 +180,46 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                             friendToChatId.put(targetId, chat.getId());
                         }
 
-                        String lastMsg = "Tap to view messages";
-                        String avatar = "https://i.pravatar.cc/150?u=" + name;
-                        
-                        Conversation conv = new Conversation(name, lastMsg, "", avatar, false);
+                        Conversation conv = new Conversation(name, "No messages yet", "", "https://i.pravatar.cc/150?u=" + name, false);
                         conv.setChatId(chat.getId());
                         conv.setTargetUserId(targetId);
                         chatConversations.add(conv);
+                        
+                        fetchLastMessage(conv);
                     }
-                    adapter.updateData(chatConversations);
+                    if (!isSearching) {
+                        adapter.updateData(chatConversations);
+                    }
                 }
             }
 
             @Override
             public void onFailure(Call<List<Chat>> call, Throwable t) {
                 Toast.makeText(MainActivity.this, "Failed to load chats", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void fetchLastMessage(Conversation conv) {
+        String token = "Bearer " + Prefs.getToken();
+        RetrofitClient.getApiService().getMessages(token, conv.getChatId(), 1, null).enqueue(new Callback<List<MessageResponse>>() {
+            @Override
+            public void onResponse(Call<List<MessageResponse>> call, Response<List<MessageResponse>> response) {
+                if (response.isSuccessful() && response.body() != null && !response.body().isEmpty()) {
+                    MessageResponse lastMsg = response.body().get(0);
+                    conv.setLastMessage(lastMsg.getCiphertext());
+                    
+                    // Logic for unread: use is_read from backend
+                    // If I am NOT the sender and is_read is false, it's unread
+                    boolean isMe = lastMsg.getSenderId().equals(Prefs.getUserId());
+                    conv.setUnread(!isMe && !lastMsg.isRead()); 
+                    
+                    adapter.notifyDataSetChanged();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<MessageResponse>> call, Throwable t) {
             }
         });
     }
