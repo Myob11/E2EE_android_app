@@ -16,6 +16,8 @@ import com.example.myapplication.api.MessageRequest;
 import com.example.myapplication.api.MessageResponse;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.util.Prefs;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -27,11 +29,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
 public class ChatActivity extends AppCompatActivity {
+
+    private static final String TAG = "ChatActivityDebug";
 
     private RecyclerView recyclerView;
     private MessagesAdapter adapter;
@@ -50,7 +58,12 @@ public class ChatActivity extends AppCompatActivity {
 
     private Handler pollHandler = new Handler();
     private Runnable pollRunnable;
-    private final int POLL_INTERVAL = 1500;
+    private final int POLL_INTERVAL = 11500;
+
+    private WebSocket webSocket;
+    private OkHttpClient okHttpClient = new OkHttpClient();
+    private boolean isWebSocketConnected = false;
+    private Gson gson = new Gson();
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
 
@@ -64,6 +77,8 @@ public class ChatActivity extends AppCompatActivity {
         chatId = getIntent().getStringExtra("chatId");
         targetUserId = getIntent().getStringExtra("targetUserId");
         contactName = getIntent().getStringExtra("contactName");
+
+        Log.d(TAG, "onCreate: chatId=" + chatId + ", targetUserId=" + targetUserId + ", contactName=" + contactName);
 
         Toolbar toolbar = findViewById(R.id.chatToolbar);
         setSupportActionBar(toolbar);
@@ -88,6 +103,7 @@ public class ChatActivity extends AppCompatActivity {
                 super.onScrolled(recyclerView, dx, dy);
                 if (dy < 0 && !isLoading && oldestMessageTimestamp != null) {
                     if (layoutManager.findFirstVisibleItemPosition() <= 5) {
+                        Log.d(TAG, "onScrolled: Fetching older messages. oldestTimestamp=" + oldestMessageTimestamp);
                         fetchMessages(oldestMessageTimestamp, false);
                     }
                 }
@@ -95,15 +111,21 @@ public class ChatActivity extends AppCompatActivity {
         });
 
         if (chatId != null) {
+            Log.d(TAG, "Initial load: Fetching messages and starting WebSocket");
             fetchMessages(null, true);
+            startWebSocket();
+        } else {
+            Log.d(TAG, "No chatId yet. Waiting for first message to create chat.");
         }
 
         buttonSend.setOnClickListener(v -> {
             String text = editTextMessage.getText().toString().trim();
             if (!text.isEmpty()) {
                 if (chatId == null) {
+                    Log.d(TAG, "Send button: Creating chat and sending message");
                     createChatAndSendMessage(text);
                 } else {
+                    Log.d(TAG, "Send button: Sending message");
                     sendMessage(text);
                 }
                 editTextMessage.setText("");
@@ -113,27 +135,118 @@ public class ChatActivity extends AppCompatActivity {
         pollRunnable = new Runnable() {
             @Override
             public void run() {
-                if (chatId != null && !isLoading) {
+                // Polling as a fallback if WebSocket is not connected
+                if (chatId != null && !isLoading && !isWebSocketConnected) {
+                    Log.d(TAG, "Polling Fallback: WebSocket is disconnected. Fetching messages via HTTP.");
                     fetchMessages(null, false);
+                } else if (isWebSocketConnected) {
+                    Log.d(TAG, "Polling: WebSocket is connected. Skipping polling fetch.");
                 }
                 pollHandler.postDelayed(this, POLL_INTERVAL);
             }
         };
     }
 
+    private void startWebSocket() {
+        if (chatId == null) return;
+        
+        String token = Prefs.getToken();
+        String wsUrl = "wss://secra.top/ws/chats/" + chatId + "?token=" + token;
+
+        Log.d(TAG, "WebSocket: Connecting to " + wsUrl);
+
+        Request request = new Request.Builder()
+                .url(wsUrl)
+                .build();
+
+        webSocket = okHttpClient.newWebSocket(request, new WebSocketListener() {
+            @Override
+            public void onOpen(@NonNull WebSocket webSocket, @NonNull okhttp3.Response response) {
+                isWebSocketConnected = true;
+                Log.d(TAG, "WebSocket: Connection OPENED");
+            }
+
+            @Override
+            public void onMessage(@NonNull WebSocket webSocket, @NonNull String text) {
+                Log.d(TAG, "WebSocket: MESSAGE RECEIVED: " + text);
+                runOnUiThread(() -> {
+                    try {
+                        JsonObject json = gson.fromJson(text, JsonObject.class);
+                        String type = json.has("type") ? json.get("type").getAsString() : "";
+                        
+                        if ("message.new".equals(type)) {
+                            Log.d(TAG, "WebSocket: New message notification received");
+                            MessageResponse res = gson.fromJson(json, MessageResponse.class);
+                            handleNewMessage(res);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "WebSocket: Error parsing message JSON", e);
+                    }
+                });
+            }
+
+            @Override
+            public void onClosed(@NonNull WebSocket webSocket, int code, @NonNull String reason) {
+                isWebSocketConnected = false;
+                Log.d(TAG, "WebSocket: Connection CLOSED. Code: " + code + ", Reason: " + reason);
+            }
+
+            @Override
+            public void onFailure(@NonNull WebSocket webSocket, @NonNull Throwable t, okhttp3.Response response) {
+                isWebSocketConnected = false;
+                Log.e(TAG, "WebSocket: Connection FAILURE", t);
+                if (response != null) {
+                    Log.e(TAG, "WebSocket: Failure response code: " + response.code());
+                }
+            }
+        });
+    }
+
+    private void handleNewMessage(MessageResponse res) {
+        if (!loadedMessageIds.contains(res.getId())) {
+            Log.d(TAG, "handleNewMessage: Adding new message " + res.getId());
+            boolean isMe = res.getSenderId().equals(Prefs.getUserId());
+            
+            if (!isMe && !res.isRead()) {
+                markAsRead(res.getId());
+                res.setRead(true);
+            }
+
+            Message msg = new Message(res.getId(), res.getCiphertext(), isMe, parseIsoDate(res.getCreatedAt()), res.isRead());
+            messageList.add(msg);
+            loadedMessageIds.add(res.getId());
+            adapter.updateMessages(messageList);
+            recyclerView.smoothScrollToPosition(messageList.size() - 1);
+        } else {
+            Log.d(TAG, "handleNewMessage: Updating read status for existing message " + res.getId());
+            updateExistingMessageReadStatus(res.getId(), res.isRead());
+            adapter.updateMessages(messageList);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d(TAG, "onResume: Starting polling and checking WebSocket");
         pollHandler.postDelayed(pollRunnable, POLL_INTERVAL);
+        if (chatId != null && !isWebSocketConnected) {
+            startWebSocket();
+        }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        Log.d(TAG, "onPause: Stopping polling and closing WebSocket");
         pollHandler.removeCallbacks(pollRunnable);
+        if (webSocket != null) {
+            webSocket.close(1000, "Activity paused");
+            isWebSocketConnected = false;
+        }
     }
 
     private void fetchMessages(String before, boolean isInitialLoad) {
+        Log.d(TAG, "fetchMessages: Requesting messages (before=" + before + ")");
         isLoading = true;
         String token = "Bearer " + Prefs.getToken();
         RetrofitClient.getApiService().getMessages(token, chatId, PAGE_SIZE, before).enqueue(new Callback<List<MessageResponse>>() {
@@ -142,6 +255,7 @@ public class ChatActivity extends AppCompatActivity {
                 isLoading = false;
                 if (response.isSuccessful() && response.body() != null) {
                     List<MessageResponse> newResponses = response.body();
+                    Log.d(TAG, "fetchMessages: Received " + newResponses.size() + " messages");
                     if (newResponses.isEmpty()) return;
 
                     if (before == null) {
@@ -151,10 +265,9 @@ public class ChatActivity extends AppCompatActivity {
                             
                             boolean isMe = res.getSenderId().equals(Prefs.getUserId());
                             
-                            // 1. Mark incoming messages as read
                             if (!isMe && !res.isRead()) {
                                 markAsRead(res.getId());
-                                res.setRead(true); // Locally mark as read for UI
+                                res.setRead(true);
                             }
 
                             if (!loadedMessageIds.contains(res.getId())) {
@@ -163,7 +276,6 @@ public class ChatActivity extends AppCompatActivity {
                                 loadedMessageIds.add(res.getId());
                                 addedAny = true;
                             } else {
-                                // Update read status for existing messages (for sent message receipts)
                                 updateExistingMessageReadStatus(res.getId(), res.isRead());
                             }
                         }
@@ -172,11 +284,12 @@ public class ChatActivity extends AppCompatActivity {
                             adapter.updateMessages(messageList);
                             recyclerView.smoothScrollToPosition(messageList.size() - 1);
                         } else {
-                            adapter.updateMessages(messageList); // Just refresh read statuses
+                            adapter.updateMessages(messageList);
                         }
                         
                         if (oldestMessageTimestamp == null || isInitialLoad) {
                             oldestMessageTimestamp = newResponses.get(newResponses.size() - 1).getCreatedAt();
+                            Log.d(TAG, "fetchMessages: Set oldestMessageTimestamp to " + oldestMessageTimestamp);
                         }
 
                     } else {
@@ -195,24 +308,37 @@ public class ChatActivity extends AppCompatActivity {
                         adapter.updateMessages(messageList);
                         adapter.notifyItemRangeInserted(0, olderMessages.size());
                         oldestMessageTimestamp = newResponses.get(newResponses.size() - 1).getCreatedAt();
+                        Log.d(TAG, "fetchMessages (pagination): Set oldestMessageTimestamp to " + oldestMessageTimestamp);
                     }
+                } else {
+                    Log.e(TAG, "fetchMessages: Response failed. Code: " + response.code());
                 }
             }
 
             @Override
             public void onFailure(Call<List<MessageResponse>> call, Throwable t) {
                 isLoading = false;
+                Log.e(TAG, "fetchMessages: Network error", t);
             }
         });
     }
 
     private void markAsRead(String messageId) {
+        Log.d(TAG, "markAsRead: Marking message " + messageId + " as read");
         String token = "Bearer " + Prefs.getToken();
         RetrofitClient.getApiService().markAsRead(token, messageId).enqueue(new Callback<Map<String, Object>>() {
             @Override
-            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {}
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "markAsRead: Success for " + messageId);
+                } else {
+                    Log.e(TAG, "markAsRead: Failed for " + messageId + ". Code: " + response.code());
+                }
+            }
             @Override
-            public void onFailure(Call<Map<String, Object>> call, Throwable t) {}
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                Log.e(TAG, "markAsRead: Error for " + messageId, t);
+            }
         });
     }
 
@@ -220,6 +346,7 @@ public class ChatActivity extends AppCompatActivity {
         for (Message m : messageList) {
             if (m.getId() != null && m.getId().equals(id)) {
                 if (m.isRead() != isRead) {
+                    Log.d(TAG, "updateExistingMessageReadStatus: Message " + id + " read status changed to " + isRead);
                     m.setRead(isRead);
                 }
                 break;
@@ -232,11 +359,13 @@ public class ChatActivity extends AppCompatActivity {
             Date date = isoFormat.parse(isoDate);
             return date != null ? date.getTime() : System.currentTimeMillis();
         } catch (ParseException e) {
+            Log.e(TAG, "parseIsoDate: Error parsing " + isoDate, e);
             return System.currentTimeMillis();
         }
     }
 
     private void createChatAndSendMessage(String text) {
+        Log.d(TAG, "createChatAndSendMessage: Creating chat with " + targetUserId);
         String token = "Bearer " + Prefs.getToken();
         String currentUserId = Prefs.getUserId();
         List<String> ids = Arrays.asList(currentUserId, targetUserId);
@@ -253,19 +382,24 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<Chat> call, Response<Chat> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     chatId = response.body().getId();
+                    Log.d(TAG, "createChat: Success. New chatId=" + chatId);
+                    startWebSocket();
                     sendMessage(text);
                 } else {
+                    Log.e(TAG, "createChat: Failed. Code: " + response.code());
                     Toast.makeText(ChatActivity.this, "Failed to start chat", Toast.LENGTH_SHORT).show();
                 }
             }
             @Override
             public void onFailure(Call<Chat> call, Throwable t) {
+                Log.e(TAG, "createChat: Error", t);
                 Toast.makeText(ChatActivity.this, "Network error", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void sendMessage(String text) {
+        Log.d(TAG, "sendMessage: Sending message to chatId=" + chatId);
         String token = "Bearer " + Prefs.getToken();
         MessageRequest request = new MessageRequest(chatId, Prefs.getUserId(), text, "text");
         RetrofitClient.getApiService().sendMessage(token, chatId, request).enqueue(new Callback<MessageResponse>() {
@@ -273,16 +407,20 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<MessageResponse> call, Response<MessageResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     MessageResponse res = response.body();
+                    Log.d(TAG, "sendMessage: Success. MessageId=" + res.getId());
                     if (!loadedMessageIds.contains(res.getId())) {
                         messageList.add(new Message(res.getId(), text, true, parseIsoDate(res.getCreatedAt()), false));
                         loadedMessageIds.add(res.getId());
                         adapter.updateMessages(messageList);
                         recyclerView.smoothScrollToPosition(messageList.size() - 1);
                     }
+                } else {
+                    Log.e(TAG, "sendMessage: Failed. Code: " + response.code());
                 }
             }
             @Override
             public void onFailure(Call<MessageResponse> call, Throwable t) {
+                Log.e(TAG, "sendMessage: Error", t);
                 Toast.makeText(ChatActivity.this, "Failed to send message", Toast.LENGTH_SHORT).show();
             }
         });

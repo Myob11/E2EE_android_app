@@ -2,6 +2,7 @@ package com.example.myapplication;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Toast;
@@ -20,6 +21,8 @@ import retrofit2.Response;
 
 public class FriendsActivity extends AppCompatActivity implements FriendsAdapter.OnFriendClickListener {
 
+    private static final String TAG = "FriendsActivityDebug";
+
     private RecyclerView recyclerView;
     private FriendsAdapter adapter;
     private List<User> friendsList = new ArrayList<>();
@@ -28,6 +31,8 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_friends);
+
+        Log.d(TAG, "onCreate: Initializing FriendsActivity");
 
         Toolbar toolbar = findViewById(R.id.friendsToolbar);
         setSupportActionBar(toolbar);
@@ -48,20 +53,25 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
         
+        Log.d(TAG, "fetchFriends: Requesting friends for userId=" + userId);
+        
         RetrofitClient.getApiService().getFriends(token, userId).enqueue(new Callback<List<User>>() {
             @Override
             public void onResponse(Call<List<User>> call, Response<List<User>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     friendsList.clear();
                     friendsList.addAll(response.body());
+                    Log.d(TAG, "fetchFriends: Success. Received " + friendsList.size() + " friends");
                     adapter.notifyDataSetChanged();
                 } else {
+                    Log.e(TAG, "fetchFriends: Failed. Code=" + response.code());
                     Toast.makeText(FriendsActivity.this, "Failed to load friends", Toast.LENGTH_SHORT).show();
                 }
             }
 
             @Override
             public void onFailure(Call<List<User>> call, Throwable t) {
+                Log.e(TAG, "fetchFriends: Network error", t);
                 Toast.makeText(FriendsActivity.this, "Network error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
@@ -76,6 +86,7 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.action_find_new) {
+            Log.d(TAG, "Menu action: Find New");
             startActivity(new Intent(this, SearchUsersActivity.class));
             return true;
         }
@@ -90,6 +101,7 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
 
     @Override
     public void onFriendClick(User friend) {
+        Log.d(TAG, "onFriendClick: Opening chat with " + friend.getUsername() + ", userId=" + friend.getId());
         Intent intent = new Intent(this, ChatActivity.class);
         intent.putExtra("targetUserId", friend.getId());
         intent.putExtra("contactName", friend.getUsername());
