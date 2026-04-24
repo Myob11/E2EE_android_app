@@ -50,7 +50,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private Handler pollHandler = new Handler();
     private Runnable pollRunnable;
-    private final int POLL_INTERVAL = 1000; 
+    private final int POLL_INTERVAL = 3000;
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
 
