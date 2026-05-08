@@ -16,6 +16,19 @@
         app:layout_constraintTop_toTopOf="parent"
         app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
 
+    <TextView
+        android:id="@+id/textViewStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFF3E0"
+        android:padding="4dp"
+        android:text="Connecting..."
+        android:textColor="#E65100"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/chatToolbar" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerViewMessages"
         android:layout_width="match_parent"
@@ -23,7 +36,7 @@
         android:padding="8dp"
         android:clipToPadding="false"
         app:layout_constraintBottom_toTopOf="@+id/layoutInput"
-        app:layout_constraintTop_toBottomOf="@id/chatToolbar" />
+        app:layout_constraintTop_toBottomOf="@id/textViewStatus" />
 
     <LinearLayout
         android:id="@+id/layoutInput"

@@ -3,8 +3,10 @@ package com.example.myapplication;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.WebSocket;
@@ -47,6 +50,7 @@ public class ChatActivity extends AppCompatActivity {
     private List<String> loadedMessageIds = new ArrayList<>(); 
     private EditText editTextMessage;
     private ImageButton buttonSend;
+    private TextView textViewStatus;
     
     private String chatId;
     private String targetUserId;
@@ -58,11 +62,15 @@ public class ChatActivity extends AppCompatActivity {
 
     private Handler pollHandler = new Handler();
     private Runnable pollRunnable;
-    private final int POLL_INTERVAL = 11500;
+    private final int POLL_INTERVAL = 2000;
 
     private WebSocket webSocket;
-    private OkHttpClient okHttpClient = new OkHttpClient();
+    private OkHttpClient okHttpClient = new OkHttpClient.Builder()
+            .pingInterval(30, TimeUnit.SECONDS)
+            .build();
+            
     private boolean isWebSocketConnected = false;
+    private boolean isWebSocketConnecting = false;
     private Gson gson = new Gson();
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
@@ -90,6 +98,7 @@ public class ChatActivity extends AppCompatActivity {
         recyclerView = findViewById(R.id.recyclerViewMessages);
         editTextMessage = findViewById(R.id.editTextMessage);
         buttonSend = findViewById(R.id.buttonSend);
+        textViewStatus = findViewById(R.id.textViewStatus);
 
         adapter = new MessagesAdapter(messageList);
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
@@ -135,35 +144,52 @@ public class ChatActivity extends AppCompatActivity {
         pollRunnable = new Runnable() {
             @Override
             public void run() {
-                // Polling as a fallback if WebSocket is not connected
                 if (chatId != null && !isLoading && !isWebSocketConnected) {
-                    Log.d(TAG, "Polling Fallback: WebSocket is disconnected. Fetching messages via HTTP.");
+                    Log.d(TAG, "Polling Fallback (2s): WebSocket is disconnected. Fetching messages via HTTP.");
                     fetchMessages(null, false);
                 } else if (isWebSocketConnected) {
-                    Log.d(TAG, "Polling: WebSocket is connected. Skipping polling fetch.");
+                    Log.v(TAG, "Polling: WebSocket is connected. Skipping polling fetch.");
                 }
                 pollHandler.postDelayed(this, POLL_INTERVAL);
             }
         };
     }
 
+    private void updateStatusUI(String message, boolean visible) {
+        runOnUiThread(() -> {
+            if (textViewStatus != null) {
+                textViewStatus.setText(message);
+                textViewStatus.setVisibility(visible ? View.VISIBLE : View.GONE);
+            }
+        });
+    }
+
     private void startWebSocket() {
-        if (chatId == null) return;
+        if (chatId == null || isWebSocketConnected || isWebSocketConnecting) {
+            Log.d(TAG, "startWebSocket: Skipping connection. chatId=" + chatId + ", connected=" + isWebSocketConnected + ", connecting=" + isWebSocketConnecting);
+            return;
+        }
+        
+        isWebSocketConnecting = true;
+        updateStatusUI("Connecting to Realtime...", true);
         
         String token = Prefs.getToken();
-        String wsUrl = "wss://secra.top/ws/chats/" + chatId + "?token=" + token;
+        String wsUrl = "wss://secra.top/ws/chats/" + chatId;
 
         Log.d(TAG, "WebSocket: Connecting to " + wsUrl);
 
         Request request = new Request.Builder()
                 .url(wsUrl)
+                .addHeader("Authorization", "Bearer " + token)
                 .build();
 
         webSocket = okHttpClient.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(@NonNull WebSocket webSocket, @NonNull okhttp3.Response response) {
                 isWebSocketConnected = true;
-                Log.d(TAG, "WebSocket: Connection OPENED");
+                isWebSocketConnecting = false;
+                Log.i(TAG, "WebSocket: Connection OPENED");
+                updateStatusUI("Connected", false);
             }
 
             @Override
@@ -176,8 +202,19 @@ public class ChatActivity extends AppCompatActivity {
                         
                         if ("message.new".equals(type)) {
                             Log.d(TAG, "WebSocket: New message notification received");
-                            MessageResponse res = gson.fromJson(json, MessageResponse.class);
-                            handleNewMessage(res);
+                            // Based on updated API documentation, the message is nested
+                            if (json.has("message")) {
+                                MessageResponse res = gson.fromJson(json.get("message"), MessageResponse.class);
+                                handleNewMessage(res);
+                            } else {
+                                Log.w(TAG, "WebSocket: message.new event missing 'message' object. Trying root parse.");
+                                MessageResponse res = gson.fromJson(json, MessageResponse.class);
+                                if (res.getId() != null) {
+                                    handleNewMessage(res);
+                                }
+                            }
+                        } else if ("connected".equals(type)) {
+                            Log.d(TAG, "WebSocket: Server confirmed session");
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "WebSocket: Error parsing message JSON", e);
@@ -188,21 +225,27 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onClosed(@NonNull WebSocket webSocket, int code, @NonNull String reason) {
                 isWebSocketConnected = false;
-                Log.d(TAG, "WebSocket: Connection CLOSED. Code: " + code + ", Reason: " + reason);
+                isWebSocketConnecting = false;
+                Log.w(TAG, "WebSocket: Connection CLOSED. Code: " + code + ", Reason: " + reason);
+                updateStatusUI("Realtime Disconnected. Polling active (2s).", true);
             }
 
             @Override
             public void onFailure(@NonNull WebSocket webSocket, @NonNull Throwable t, okhttp3.Response response) {
                 isWebSocketConnected = false;
+                isWebSocketConnecting = false;
                 Log.e(TAG, "WebSocket: Connection FAILURE", t);
-                if (response != null) {
-                    Log.e(TAG, "WebSocket: Failure response code: " + response.code());
-                }
+                updateStatusUI("Realtime Connection Failed. Polling active (2s).", true);
             }
         });
     }
 
     private void handleNewMessage(MessageResponse res) {
+        if (res == null || res.getId() == null) {
+            Log.e(TAG, "handleNewMessage: Received null message or null ID");
+            return;
+        }
+
         if (!loadedMessageIds.contains(res.getId())) {
             Log.d(TAG, "handleNewMessage: Adding new message " + res.getId());
             boolean isMe = res.getSenderId().equals(Prefs.getUserId());
@@ -229,7 +272,7 @@ public class ChatActivity extends AppCompatActivity {
         super.onResume();
         Log.d(TAG, "onResume: Starting polling and checking WebSocket");
         pollHandler.postDelayed(pollRunnable, POLL_INTERVAL);
-        if (chatId != null && !isWebSocketConnected) {
+        if (chatId != null && !isWebSocketConnected && !isWebSocketConnecting) {
             startWebSocket();
         }
     }
@@ -242,6 +285,7 @@ public class ChatActivity extends AppCompatActivity {
         if (webSocket != null) {
             webSocket.close(1000, "Activity paused");
             isWebSocketConnected = false;
+            isWebSocketConnecting = false;
         }
     }
 
