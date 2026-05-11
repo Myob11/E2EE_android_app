@@ -164,7 +164,13 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     try {
-                        byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), response.body().getIdentityKey());
+                        // Use X3DH-style key agreement with recipient's identity, signed prekey, and one-time prekey
+                        byte[] secret = SignalManager.computeX3DHSharedSecret(
+                            Prefs.getIdentityPrivKey(),
+                            response.body().getIdentityKey(),
+                            response.body().getSignedPrekey(),
+                            response.body().getOneTimePrekey()
+                        );
                         Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
                         updateStatusUI("", false);
                         encryptAndSendMessage(plaintext, secret);
