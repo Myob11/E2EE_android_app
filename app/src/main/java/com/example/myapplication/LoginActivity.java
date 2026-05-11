@@ -9,10 +9,14 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import com.example.myapplication.api.AuthRequest;
 import com.example.myapplication.api.AuthResponse;
+import com.example.myapplication.api.KeyBundleRequest;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.api.User;
 import com.example.myapplication.util.Prefs;
+import com.example.myapplication.util.SignalManager;
 import com.google.android.material.textfield.TextInputEditText;
+import java.security.SecureRandom;
+import java.util.List;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -27,14 +31,11 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Auto-login logic
         if (Prefs.getToken() != null) {
             if (Prefs.getUserId() != null && Prefs.getUsername() != null) {
-                // Fully logged in
                 goToMain();
                 return;
             } else {
-                // Token exists but info is missing, try to recover
                 fetchUserProfile(Prefs.getToken());
             }
         }
@@ -91,9 +92,14 @@ public class LoginActivity extends AppCompatActivity {
                 if (response.isSuccessful() && response.body() != null) {
                     Prefs.saveUserId(response.body().getId());
                     Prefs.saveUsername(response.body().getUsername());
-                    goToMain();
+                    
+                    // Check if keys exist on this device, if not generate and upload
+                    if (Prefs.getIdentityPubKey() == null) {
+                        initializeKeysAndGoToMain(token, response.body().getId());
+                    } else {
+                        goToMain();
+                    }
                 } else {
-                    // If profile fetch fails, token might be expired, force login
                     Prefs.clear();
                     setContentView(R.layout.activity_login); 
                 }
@@ -104,6 +110,48 @@ public class LoginActivity extends AppCompatActivity {
                 Toast.makeText(LoginActivity.this, "Connection error", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private void initializeKeysAndGoToMain(String token, String userId) {
+        try {
+            // Generate Identity Keys
+            SignalManager.KeyPairStrings identityKeys = SignalManager.generateKeyPair();
+            Prefs.saveIdentityKeys(identityKeys.publicKey, identityKeys.privateKey);
+            
+            // Generate Registration ID
+            int registrationId = new SecureRandom().nextInt(10000) + 1000;
+            Prefs.saveRegistrationId(registrationId);
+
+            // Generate Signed Prekey
+            SignalManager.KeyPairStrings signedPrekey = SignalManager.generateKeyPair();
+            Prefs.saveSignedPrekey(signedPrekey.publicKey, signedPrekey.privateKey);
+            
+            // Generate One-time Prekeys
+            List<String> otps = SignalManager.generateOneTimePrekeys(10);
+            
+            KeyBundleRequest bundleRequest = new KeyBundleRequest(
+                    identityKeys.publicKey,
+                    signedPrekey.publicKey,
+                    otps,
+                    registrationId,
+                    "android-" + android.os.Build.MODEL
+            );
+
+            RetrofitClient.getApiService().uploadKeys("Bearer " + token, userId, bundleRequest).enqueue(new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    goToMain();
+                }
+
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    goToMain(); // Proceed anyway
+                }
+            });
+        } catch (Exception e) {
+            Log.e("LoginActivity", "Key generation failed", e);
+            goToMain();
+        }
     }
 
     private void goToMain() {

@@ -32,6 +32,12 @@ public interface ApiService {
     @GET("/api/users/{user_id}/friends")
     Call<List<User>> getFriends(@Header("Authorization") String token, @Path("user_id") String currentUserId);
 
+    @POST("/api/users/{user_id}/keys")
+    Call<Void> uploadKeys(@Header("Authorization") String token, @Path("user_id") String userId, @Body KeyBundleRequest request);
+
+    @GET("/api/users/{user_id}/bundle")
+    Call<KeyBundleResponse> getKeyBundle(@Header("Authorization") String token, @Path("user_id") String userId);
+
     @GET("/api/chats")
     Call<List<Chat>> getChats(@Header("Authorization") String token, @Query("user_id") String userId);
 

@@ -12,6 +12,13 @@ public class Prefs {
     private static final String KEY_TOKEN = "auth_token";
     private static final String KEY_USER_ID = "user_id";
     private static final String KEY_USERNAME = "username";
+    
+    private static final String KEY_IDENTITY_PUB = "identity_pub";
+    private static final String KEY_IDENTITY_PRIV = "identity_priv";
+    private static final String KEY_SIGNED_PREKEY_PUB = "signed_prekey_pub";
+    private static final String KEY_SIGNED_PREKEY_PRIV = "signed_prekey_priv";
+    private static final String KEY_REGISTRATION_ID = "registration_id";
+
     private static SharedPreferences sharedPreferences;
 
     public static void init(Context context) {
@@ -29,7 +36,6 @@ public class Prefs {
             );
         } catch (GeneralSecurityException | IOException e) {
             e.printStackTrace();
-            // Fallback to regular prefs if encryption fails (not ideal for production)
             sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         }
     }
@@ -56,6 +62,43 @@ public class Prefs {
 
     public static String getUsername() {
         return sharedPreferences.getString(KEY_USERNAME, null);
+    }
+
+    // Signal Key Storage
+    public static void saveIdentityKeys(String pub, String priv) {
+        sharedPreferences.edit()
+                .putString(KEY_IDENTITY_PUB, pub)
+                .putString(KEY_IDENTITY_PRIV, priv)
+                .apply();
+    }
+
+    public static String getIdentityPubKey() { return sharedPreferences.getString(KEY_IDENTITY_PUB, null); }
+    public static String getIdentityPrivKey() { return sharedPreferences.getString(KEY_IDENTITY_PRIV, null); }
+
+    public static void saveSignedPrekey(String pub, String priv) {
+        sharedPreferences.edit()
+                .putString(KEY_SIGNED_PREKEY_PUB, pub)
+                .putString(KEY_SIGNED_PREKEY_PRIV, priv)
+                .apply();
+    }
+
+    public static String getSignedPrekeyPub() { return sharedPreferences.getString(KEY_SIGNED_PREKEY_PUB, null); }
+    public static String getSignedPrekeyPriv() { return sharedPreferences.getString(KEY_SIGNED_PREKEY_PRIV, null); }
+
+    public static void saveRegistrationId(int id) {
+        sharedPreferences.edit().putInt(KEY_REGISTRATION_ID, id).apply();
+    }
+
+    public static int getRegistrationId() {
+        return sharedPreferences.getInt(KEY_REGISTRATION_ID, 0);
+    }
+    
+    public static void saveSharedSecret(String userId, String secret) {
+        sharedPreferences.edit().putString("shared_secret_" + userId, secret).apply();
+    }
+    
+    public static String getSharedSecret(String userId) {
+        return sharedPreferences.getString("shared_secret_" + userId, null);
     }
 
     public static void clear() {

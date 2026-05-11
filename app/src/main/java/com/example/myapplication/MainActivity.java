@@ -2,6 +2,7 @@ package com.example.myapplication;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,6 +18,7 @@ import com.example.myapplication.api.MessageResponse;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.api.User;
 import com.example.myapplication.util.Prefs;
+import com.example.myapplication.util.SignalManager;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,8 +45,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Log.d(TAG, "onCreate: Initializing MainActivity");
-
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
@@ -62,7 +62,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         searchView.setOnQueryTextFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) {
                 isSearching = true;
-                Log.d(TAG, "SearchView focus gained: isSearching=true");
                 performSearch("");
             }
         });
@@ -70,7 +69,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
-                Log.d(TAG, "onQueryTextSubmit: query=" + query);
                 performSearch(query);
                 return true;
             }
@@ -78,7 +76,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
             @Override
             public boolean onQueryTextChange(String newText) {
                 if (isSearching) {
-                    Log.v(TAG, "onQueryTextChange: text=" + newText);
                     performSearch(newText);
                 }
                 return true;
@@ -89,7 +86,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         View closeButton = searchView.findViewById(closeButtonId);
         if (closeButton != null) {
             closeButton.setOnClickListener(v -> {
-                Log.d(TAG, "SearchView close button clicked");
                 searchView.setQuery("", false);
                 searchView.clearFocus();
                 isSearching = false;
@@ -113,17 +109,14 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                     conv.setChatId(friendToChatId.get(friend.getId()));
                 }
                 searchResults.add(conv);
-                // Profile picture loading is now handled by ConversationsAdapter using ProfileUtils
             }
         }
-        Log.d(TAG, "performSearch: query='" + query + "', results=" + searchResults.size());
         adapter.updateData(searchResults);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        Log.d(TAG, "onResume: isSearching=" + isSearching);
         if (!isSearching) {
             loadData();
         }
@@ -133,32 +126,33 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
         
-        Log.d(TAG, "loadData: Fetching friends for userId=" + userId);
-        
-        if (token == null || userId == null) {
-            Log.e(TAG, "loadData: Token or UserId is null. User might be logged out.");
-            return;
-        }
+        if (token == null || userId == null) return;
 
         RetrofitClient.getApiService().getFriends(token, userId).enqueue(new Callback<List<User>>() {
             @Override
             public void onResponse(Call<List<User>> call, Response<List<User>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     friendsList = response.body();
-                    Log.d(TAG, "loadData: Friends list loaded, count=" + friendsList.size());
                     friendNames.clear();
-                    for (User user : response.body()) {
+                    for (User user : friendsList) {
                         friendNames.put(user.getId(), user.getUsername());
+                        
+                        // Establish shared secret if we have their public key and don't have a secret yet
+                        if (user.getPublic_key() != null && Prefs.getSharedSecret(user.getId()) == null) {
+                            try {
+                                byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), user.getPublic_key());
+                                Prefs.saveSharedSecret(user.getId(), Base64.encodeToString(secret, Base64.NO_WRAP));
+                            } catch (Exception e) {
+                                Log.e(TAG, "Failed to compute secret for " + user.getUsername(), e);
+                            }
+                        }
                     }
-                } else {
-                    Log.e(TAG, "loadData: Response failed. Code=" + response.code());
                 }
                 fetchChats();
             }
 
             @Override
             public void onFailure(Call<List<User>> call, Throwable t) {
-                Log.e(TAG, "loadData: Network error while fetching friends", t);
                 fetchChats();
             }
         });
@@ -173,8 +167,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
             public void onResponse(Call<List<Chat>> call, Response<List<Chat>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     List<Chat> chats = response.body();
-                    Log.d(TAG, "fetchChats: Received " + chats.size() + " chats");
-
                     chatConversations.clear();
                     friendToChatId.clear();
                     for (Chat chat : chats) {
@@ -207,20 +199,14 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                         conv.setLastMessageTime(chat.getCreatedAt());
                         chatConversations.add(conv);
                         
-                        // Profile picture loading is now handled by ConversationsAdapter using ProfileUtils
-                        
                         fetchLastMessage(conv);
                     }
-                    
                     sortAndDisplayChats();
-                } else {
-                    Log.e(TAG, "fetchChats: Response failed. Code=" + response.code());
                 }
             }
 
             @Override
             public void onFailure(Call<List<Chat>> call, Throwable t) {
-                Log.e(TAG, "fetchChats: Network error", t);
                 Toast.makeText(MainActivity.this, "Failed to load chats", Toast.LENGTH_SHORT).show();
             }
         });
@@ -228,7 +214,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
 
     private void fetchLastMessage(Conversation conv) {
         String token = "Bearer " + Prefs.getToken();
-        Log.v(TAG, "fetchLastMessage: Fetching for chatId=" + conv.getChatId());
         RetrofitClient.getApiService().getMessages(token, conv.getChatId(), 1, null).enqueue(new Callback<List<MessageResponse>>() {
             @Override
             public void onResponse(Call<List<MessageResponse>> call, Response<List<MessageResponse>> response) {
@@ -236,15 +221,12 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                     MessageResponse lastMsg = response.body().get(0);
                     conv.setLastMessage(lastMsg.getCiphertext());
                     conv.setLastMessageTime(lastMsg.getCreatedAt());
-                    Log.v(TAG, "fetchLastMessage: Got message for " + conv.getChatId());
                     sortAndDisplayChats();
                 }
             }
 
             @Override
-            public void onFailure(Call<List<MessageResponse>> call, Throwable t) {
-                Log.e(TAG, "fetchLastMessage: Error for " + conv.getChatId(), t);
-            }
+            public void onFailure(Call<List<MessageResponse>> call, Throwable t) {}
         });
     }
 
@@ -259,14 +241,12 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         });
         
         if (!isSearching) {
-            Log.d(TAG, "sortAndDisplayChats: Updating adapter with " + chatConversations.size() + " conversations");
             adapter.updateData(chatConversations);
         }
     }
 
     @Override
     public void onConversationClick(Conversation conversation) {
-        Log.d(TAG, "onConversationClick: Opening chat with " + conversation.getContactName() + ", chatId=" + conversation.getChatId());
         Intent intent = new Intent(this, ChatActivity.class);
         intent.putExtra("chatId", conversation.getChatId());
         intent.putExtra("targetUserId", conversation.getTargetUserId());
@@ -284,11 +264,9 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_settings) {
-            Log.d(TAG, "Menu action: Settings");
             startActivity(new Intent(this, SettingsActivity.class));
             return true;
         } else if (id == R.id.action_add_friend) {
-            Log.d(TAG, "Menu action: Add Friend");
             startActivity(new Intent(this, SearchUsersActivity.class));
             return true;
         }
