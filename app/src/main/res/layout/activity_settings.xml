@@ -41,6 +41,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp">
 
+
                 <ImageView
                     android:id="@+id/imageViewAvatar"
                     android:layout_width="100dp"
@@ -57,6 +58,9 @@
                     android:layout_marginTop="8dp"
                     android:text="Change Avatar"
                     style="@style/Widget.AppCompat.Button.Borderless.Colored" />
+
+
+
             </RelativeLayout>
 
             <TextView
