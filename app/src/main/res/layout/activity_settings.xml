@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     tools:context=".SettingsActivity">
 
     <androidx.appcompat.widget.Toolbar
@@ -40,6 +41,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp">
 
+
                 <ImageView
                     android:id="@+id/imageViewAvatar"
                     android:layout_width="100dp"
@@ -56,6 +58,9 @@
                     android:layout_marginTop="8dp"
                     android:text="Change Avatar"
                     style="@style/Widget.AppCompat.Button.Borderless.Colored" />
+
+
+
             </RelativeLayout>
 
             <TextView
