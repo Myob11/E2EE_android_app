@@ -5,6 +5,7 @@ import java.util.Map;
 import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
+import retrofit2.http.DELETE;
 import retrofit2.http.GET;
 import retrofit2.http.Header;
 import retrofit2.http.POST;
@@ -70,4 +71,14 @@ public interface ApiService {
 
     @GET("/api/profiles/{username}/picture")
     Call<Map<String, String>> getDownloadUrl(@Header("Authorization") String token, @Path("username") String username);
+
+    @DELETE("/api/chats/{chat_id}")
+    Call<Map<String, Object>> deleteChat(@Header("Authorization") String token, @Path("chat_id") String chatId);
+
+    // Fallback for deployments that expose delete as POST action routes
+    @POST("/api/chats/{chat_id}/delete")
+    Call<Map<String, Object>> deleteChatPostAction(@Header("Authorization") String token, @Path("chat_id") String chatId);
+
+    @POST("/api/chats/{chat_id}/remove")
+    Call<Map<String, Object>> deleteChatPostRemove(@Header("Authorization") String token, @Path("chat_id") String chatId);
 }
