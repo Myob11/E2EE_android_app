@@ -5,12 +5,18 @@
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
         <item name="colorOnPrimary">@color/white</item>
+
         <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/accent</item>
         <item name="colorSecondaryVariant">@color/accent</item>
         <item name="colorOnSecondary">@color/black</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+
+        <!-- Status bar configuration -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!-- Match the status bar color to the Toolbar blue -->
+        <item name="android:statusBarColor">@color/primary</item>
+        <!-- false = white icons (visible on blue background) -->
+        <item name="android:windowLightStatusBar">false</item>
 
         <!-- Explicit text colors for Light Theme -->
         <item name="android:textColorPrimary">@color/black</item>

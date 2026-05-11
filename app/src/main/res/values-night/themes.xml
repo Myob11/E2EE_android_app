@@ -9,12 +9,17 @@
         <item name="colorSecondary">@color/accent</item>
         <item name="colorSecondaryVariant">@color/accent</item>
         <item name="colorOnSecondary">@color/white</item>
-        <!-- Status bar color. -->
-        <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
+
+        <!-- Status bar configuration -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:windowLightStatusBar">false</item>
 
         <!-- Background and text colors for Dark Theme -->
         <item name="android:windowBackground">#121212</item>
         <item name="android:textColorPrimary">@color/white</item>
         <item name="android:textColorSecondary">#B0B0B0</item>
     </style>
+
+    <style name="Theme.MyApplication" parent="Base.Theme.MyApplication" />
 </resources>
