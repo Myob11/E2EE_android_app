@@ -4,16 +4,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="false"
+    android:fitsSystemWindows="true"
     tools:context=".ChatActivity">
 
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/chatToolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="?attr/actionBarSize"
+        android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorPrimary"
-        android:fitsSystemWindows="true"
         android:elevation="4dp"
         android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
         app:layout_constraintTop_toTopOf="parent"
@@ -59,7 +57,10 @@
             android:hint="Type a message..."
             android:background="@drawable/search_background"
             android:padding="12dp"
-            android:maxLines="4" />
+            android:maxLines="4"
+            android:textColor="@android:color/black"
+            android:textColorHint="#757575"
+            android:inputType="textShortMessage|textAutoCorrect|textCapSentences" />
 
         <ImageButton
             android:id="@+id/buttonSend"
