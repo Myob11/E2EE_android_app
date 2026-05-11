@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -47,12 +48,41 @@ public class SignalManager {
         return keys;
     }
 
+    /**
+     * Derives an AES key from a shared secret using HKDF-SHA256
+     */
+    private static byte[] deriveAESKey(byte[] sharedSecret) throws Exception {
+        // HKDF-SHA256 Extract step
+        byte[] salt = new byte[32]; // All zeros
+        Mac hkdfExtract = Mac.getInstance("HmacSHA256");
+        hkdfExtract.init(new SecretKeySpec(salt, 0, salt.length, "HmacSHA256"));
+        byte[] prk = hkdfExtract.doFinal(sharedSecret);
+        
+        // HKDF-SHA256 Expand step (for 16 bytes = 128-bit AES key)
+        byte[] info = "AES_ENCRYPTION_KEY".getBytes();
+        byte[] hashInput = new byte[info.length + 1];
+        System.arraycopy(info, 0, hashInput, 0, info.length);
+        hashInput[info.length] = 0x01;
+
+        Mac hkdfExpand = Mac.getInstance("HmacSHA256");
+        hkdfExpand.init(new SecretKeySpec(prk, 0, prk.length, "HmacSHA256"));
+        byte[] t = hkdfExpand.doFinal(hashInput);
+
+        // Return first 16 bytes for AES-128
+        byte[] aesKey = new byte[16];
+        System.arraycopy(t, 0, aesKey, 0, 16);
+        return aesKey;
+    }
+
     public static String encrypt(String plaintext, byte[] sharedSecret) throws Exception {
+        // Derive AES key from shared secret using HKDF
+        byte[] aesKey = deriveAESKey(sharedSecret);
+        
         Cipher cipher = Cipher.getInstance(AES_GCM);
         byte[] iv = new byte[GCM_IV_LENGTH];
         new SecureRandom().nextBytes(iv);
         
-        SecretKeySpec keySpec = new SecretKeySpec(sharedSecret, 0, 16, "AES"); // Use first 128 bits
+        SecretKeySpec keySpec = new SecretKeySpec(aesKey, 0, 16, "AES");
         GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         
         cipher.init(Cipher.ENCRYPT_MODE, keySpec, parameterSpec);
@@ -66,6 +96,9 @@ public class SignalManager {
     }
 
     public static String decrypt(String base64Ciphertext, byte[] sharedSecret) throws Exception {
+        // Derive AES key from shared secret using HKDF
+        byte[] aesKey = deriveAESKey(sharedSecret);
+        
         byte[] combined = Base64.decode(base64Ciphertext, Base64.NO_WRAP);
         
         // Extract the IV from the combined buffer
@@ -73,8 +106,7 @@ public class SignalManager {
         System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
 
         Cipher cipher = Cipher.getInstance(AES_GCM);
-        SecretKeySpec keySpec = new SecretKeySpec(sharedSecret, 0, 16, "AES");
-        // Pass only the IV (not the combined data)
+        SecretKeySpec keySpec = new SecretKeySpec(aesKey, 0, 16, "AES");
         GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
 
         cipher.init(Cipher.DECRYPT_MODE, keySpec, parameterSpec);
