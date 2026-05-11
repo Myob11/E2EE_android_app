@@ -68,10 +68,15 @@ public class SignalManager {
     public static String decrypt(String base64Ciphertext, byte[] sharedSecret) throws Exception {
         byte[] combined = Base64.decode(base64Ciphertext, Base64.NO_WRAP);
         
+        // Extract the IV from the combined buffer
+        byte[] iv = new byte[GCM_IV_LENGTH];
+        System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+
         Cipher cipher = Cipher.getInstance(AES_GCM);
         SecretKeySpec keySpec = new SecretKeySpec(sharedSecret, 0, 16, "AES");
-        GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, combined, 0, GCM_IV_LENGTH);
-        
+        // Pass only the IV (not the combined data)
+        GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+
         cipher.init(Cipher.DECRYPT_MODE, keySpec, parameterSpec);
         byte[] plaintext = cipher.doFinal(combined, GCM_IV_LENGTH, combined.length - GCM_IV_LENGTH);
         
