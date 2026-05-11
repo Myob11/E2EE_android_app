@@ -2,6 +2,7 @@ package com.example.myapplication;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.util.Base64;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -10,7 +11,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import com.example.myapplication.util.Prefs;
 import com.example.myapplication.util.ProfileUtils;
+import com.example.myapplication.util.SignalManager;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,7 +67,25 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         Context context = holder.itemView.getContext();
         
         holder.name.setText(conversation.getContactName());
-        holder.lastMessage.setText(conversation.getLastMessage());
+        
+        // --- E2EE Decryption Logic ---
+        String lastMsg = conversation.getLastMessage();
+        String targetUserId = conversation.getTargetUserId();
+        String secretB64 = (targetUserId != null) ? Prefs.getSharedSecret(targetUserId) : null;
+
+        if (secretB64 != null && lastMsg != null && !lastMsg.isEmpty() && 
+            !lastMsg.equals("No messages yet") && !lastMsg.equals("Tap to chat")) {
+            try {
+                byte[] secret = Base64.decode(secretB64, Base64.NO_WRAP);
+                lastMsg = SignalManager.decrypt(lastMsg, secret);
+            } catch (Exception e) {
+                // If decryption fails, it might be a new session or corrupted state
+                lastMsg = "[Encrypted Message]";
+            }
+        }
+        holder.lastMessage.setText(lastMsg);
+        // -----------------------------
+
         holder.time.setText(conversation.getTime());
         
         holder.name.setTypeface(null, Typeface.NORMAL);
