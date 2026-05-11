@@ -8,8 +8,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import com.bumptech.glide.Glide;
 import com.example.myapplication.api.User;
+import com.example.myapplication.util.ProfileUtils;
 import java.util.List;
 
 public class UsersAdapter extends RecyclerView.Adapter<UsersAdapter.ViewHolder> {
@@ -38,11 +38,7 @@ public class UsersAdapter extends RecyclerView.Adapter<UsersAdapter.ViewHolder> 
         User user = users.get(position);
         holder.userName.setText(user.getUsername());
         
-        Glide.with(holder.itemView.getContext())
-                .load("https://i.pravatar.cc/150?u=" + user.getUsername())
-                .circleCrop()
-                .placeholder(R.mipmap.ic_launcher_round)
-                .into(holder.userAvatar);
+        ProfileUtils.loadProfilePicture(holder.itemView.getContext(), user.getUsername(), holder.userAvatar);
         
         holder.btnAddFriend.setOnClickListener(v -> listener.onAddFriendClick(user));
     }

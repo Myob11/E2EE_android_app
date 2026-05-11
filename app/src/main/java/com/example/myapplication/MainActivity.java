@@ -107,12 +107,13 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
 
         for (User friend : sortedFriends) {
             if (lowerQuery.isEmpty() || friend.getUsername().toLowerCase().contains(lowerQuery)) {
-                Conversation conv = new Conversation(friend.getUsername(), "Tap to chat", "", "https://i.pravatar.cc/150?u=" + friend.getUsername(), false);
+                Conversation conv = new Conversation(friend.getUsername(), "Tap to chat", "", null, false);
                 conv.setTargetUserId(friend.getId());
                 if (friendToChatId.containsKey(friend.getId())) {
                     conv.setChatId(friendToChatId.get(friend.getId()));
                 }
                 searchResults.add(conv);
+                // Profile picture loading is now handled by ConversationsAdapter using ProfileUtils
             }
         }
         Log.d(TAG, "performSearch: query='" + query + "', results=" + searchResults.size());
@@ -167,8 +168,6 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
         
-        Log.d(TAG, "fetchChats: Fetching chats for userId=" + userId);
-        
         RetrofitClient.getApiService().getChats(token, userId).enqueue(new Callback<List<Chat>>() {
             @Override
             public void onResponse(Call<List<Chat>> call, Response<List<Chat>> response) {
@@ -202,11 +201,13 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
                             friendToChatId.put(targetId, chat.getId());
                         }
 
-                        Conversation conv = new Conversation(name, "No messages yet", "", "https://i.pravatar.cc/150?u=" + name, false);
+                        Conversation conv = new Conversation(name, "No messages yet", "", null, false);
                         conv.setChatId(chat.getId());
                         conv.setTargetUserId(targetId);
                         conv.setLastMessageTime(chat.getCreatedAt());
                         chatConversations.add(conv);
+                        
+                        // Profile picture loading is now handled by ConversationsAdapter using ProfileUtils
                         
                         fetchLastMessage(conv);
                     }

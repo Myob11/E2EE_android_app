@@ -2,13 +2,16 @@ package com.example.myapplication.api;
 
 import java.util.List;
 import java.util.Map;
+import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.Header;
 import retrofit2.http.POST;
+import retrofit2.http.PUT;
 import retrofit2.http.Path;
 import retrofit2.http.Query;
+import retrofit2.http.Url;
 
 public interface ApiService {
     @POST("/api/auth/register")
@@ -48,4 +51,17 @@ public interface ApiService {
 
     @POST("/api/messages/{message_id}/read")
     Call<Map<String, Object>> markAsRead(@Header("Authorization") String token, @Path("message_id") String messageId);
+
+    // Profile Picture Endpoints
+    @POST("/api/profiles/{username}/picture")
+    Call<Map<String, String>> getUploadUrl(@Header("Authorization") String token, @Path("username") String username, @Body Map<String, String> body);
+
+    @PUT
+    Call<Void> uploadImage(@Url String url, @Body RequestBody image);
+
+    @POST("/api/profiles/{username}/picture/complete")
+    Call<Map<String, Object>> markUploadComplete(@Header("Authorization") String token, @Path("username") String username, @Body Map<String, Object> body);
+
+    @GET("/api/profiles/{username}/picture")
+    Call<Map<String, String>> getDownloadUrl(@Header("Authorization") String token, @Path("username") String username);
 }

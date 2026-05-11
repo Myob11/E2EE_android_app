@@ -10,7 +10,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import com.bumptech.glide.Glide;
+import com.example.myapplication.util.ProfileUtils;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,7 +67,6 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         holder.lastMessage.setText(conversation.getLastMessage());
         holder.time.setText(conversation.getTime());
         
-        // Removed bolding logic - always normal typeface
         holder.name.setTypeface(null, Typeface.NORMAL);
         holder.lastMessage.setTypeface(null, Typeface.NORMAL);
         
@@ -75,11 +74,8 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
         holder.lastMessage.setTextColor(typedValue.data);
         
-        Glide.with(context)
-                .load(conversation.getImageUrl())
-                .circleCrop()
-                .placeholder(R.mipmap.ic_launcher_round)
-                .into(holder.profileImage);
+        // Use ProfileUtils to handle URL fetching, memory caching, and disk caching
+        ProfileUtils.loadProfilePicture(context, conversation.getContactName(), holder.profileImage);
         
         holder.itemView.setOnClickListener(v -> {
             listener.onConversationClick(conversation);

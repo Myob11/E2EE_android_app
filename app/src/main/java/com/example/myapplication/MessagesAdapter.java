@@ -3,9 +3,11 @@ package com.example.myapplication;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import com.example.myapplication.util.ProfileUtils;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -17,12 +19,18 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     private static final int TYPE_RECEIVED = 2;
 
     private List<Message> messages;
+    private String otherUsername;
     private SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
     private int lastSentMessagePosition = -1;
 
     public MessagesAdapter(List<Message> messages) {
         this.messages = messages;
         updateLastSentPosition();
+    }
+
+    public void setOtherUsername(String username) {
+        this.otherUsername = username;
+        notifyDataSetChanged();
     }
 
     public void updateMessages(List<Message> newMessages) {
@@ -33,7 +41,6 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     private void updateLastSentPosition() {
         lastSentMessagePosition = -1;
-        // The status (Read/Sent) should only show under the very last message I sent in the conversation
         for (int i = messages.size() - 1; i >= 0; i--) {
             if (messages.get(i).isSentByMe()) {
                 lastSentMessagePosition = i;
@@ -69,7 +76,6 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             sentHolder.messageText.setText(message.getContent());
             sentHolder.timeText.setText(timeStr);
             
-            // Display "Read" or "Sent" only for the most recent message sent by the user
             if (position == lastSentMessagePosition) {
                 sentHolder.statusText.setVisibility(View.VISIBLE);
                 if (message.isRead()) {
@@ -86,6 +92,8 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             ReceivedViewHolder receivedHolder = (ReceivedViewHolder) holder;
             receivedHolder.messageText.setText(message.getContent());
             receivedHolder.timeText.setText(timeStr);
+
+            ProfileUtils.loadProfilePicture(receivedHolder.itemView.getContext(), otherUsername, receivedHolder.avatarImage);
         }
     }
 
@@ -106,10 +114,12 @@ public class MessagesAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     static class ReceivedViewHolder extends RecyclerView.ViewHolder {
         TextView messageText, timeText;
+        ImageView avatarImage;
         ReceivedViewHolder(View itemView) {
             super(itemView);
             messageText = itemView.findViewById(R.id.textViewMessageReceived);
             timeText = itemView.findViewById(R.id.textViewTimeReceived);
+            avatarImage = itemView.findViewById(R.id.imageViewAvatar);
         }
     }
 }

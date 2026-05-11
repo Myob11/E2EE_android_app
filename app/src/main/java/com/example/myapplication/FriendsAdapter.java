@@ -7,8 +7,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import com.bumptech.glide.Glide;
 import com.example.myapplication.api.User;
+import com.example.myapplication.util.ProfileUtils;
 import java.util.List;
 
 public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.ViewHolder> {
@@ -39,11 +39,7 @@ public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.ViewHold
         holder.lastMessage.setText("Tap to start chatting");
         holder.time.setVisibility(View.GONE);
         
-        Glide.with(holder.itemView.getContext())
-                .load("https://i.pravatar.cc/150?u=" + friend.getUsername())
-                .circleCrop()
-                .placeholder(R.mipmap.ic_launcher_round)
-                .into(holder.profileImage);
+        ProfileUtils.loadProfilePicture(holder.itemView.getContext(), friend.getUsername(), holder.profileImage);
         
         holder.itemView.setOnClickListener(v -> listener.onFriendClick(friend));
     }

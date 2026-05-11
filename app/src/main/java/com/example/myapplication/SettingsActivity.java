@@ -1,22 +1,38 @@
 package com.example.myapplication;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
-import com.bumptech.glide.Glide;
+import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.util.Prefs;
+import com.example.myapplication.util.ProfileUtils;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class SettingsActivity extends AppCompatActivity {
 
+    private static final String TAG = "SettingsActivityDebug";
     private static final int PICK_IMAGE_REQUEST = 1;
     private ImageView imageViewAvatar;
     private RadioGroup radioGroupTheme;
@@ -45,27 +61,26 @@ public class SettingsActivity extends AppCompatActivity {
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
 
-        // Display current username
         String username = Prefs.getUsername();
         if (username != null) {
             textViewUsernameDisplay.setText(username);
         }
 
-        // Load current profile picture based on username
-        Glide.with(this)
-                .load("https://i.pravatar.cc/150?u=" + username)
-                .circleCrop()
-                .into(imageViewAvatar);
+        ProfileUtils.loadProfilePicture(this, username, imageViewAvatar);
 
-        // Avatar Upload
-        buttonUploadAvatar.setOnClickListener(v -> {
-            Intent intent = new Intent();
-            intent.setType("image/*");
-            intent.setAction(Intent.ACTION_GET_CONTENT);
-            startActivityForResult(Intent.createChooser(intent, "Select Picture"), PICK_IMAGE_REQUEST);
+        // Long press on avatar to show upload prompt
+        imageViewAvatar.setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this)
+                    .setTitle("Profile Picture")
+                    .setMessage("Do you want to upload a new profile picture?")
+                    .setPositiveButton("Yes", (dialog, which) -> openGallery())
+                    .setNegativeButton("No", null)
+                    .show();
+            return true;
         });
 
-        // Theme Selection
+        buttonUploadAvatar.setOnClickListener(v -> openGallery());
+
         radioGroupTheme.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.radioLight) {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
@@ -74,7 +89,6 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
-        // Switch Account (Logout)
         buttonSwitchAccount.setOnClickListener(v -> {
             Prefs.clear();
             Intent intent = new Intent(SettingsActivity.this, LoginActivity.class);
@@ -84,13 +98,130 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    private void openGallery() {
+        Intent intent = new Intent();
+        intent.setType("image/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(Intent.createChooser(intent, "Select Picture"), PICK_IMAGE_REQUEST);
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
             Uri imageUri = data.getData();
-            Glide.with(this).load(imageUri).circleCrop().into(imageViewAvatar);
+            Log.d(TAG, "onActivityResult: Image selected. Uri=" + imageUri);
+            uploadProfilePicture(imageUri);
         }
+    }
+
+    private void uploadProfilePicture(final Uri uri) {
+        String username = Prefs.getUsername();
+        if (username == null) {
+            Log.e(TAG, "uploadProfilePicture: Username is null, aborting");
+            return;
+        }
+
+        String type = getContentResolver().getType(uri);
+        final String contentType = (type != null) ? type : "image/jpeg";
+        Log.d(TAG, "uploadProfilePicture: Detected content type=" + contentType);
+
+        Toast.makeText(this, "Uploading...", Toast.LENGTH_SHORT).show();
+        String token = "Bearer " + Prefs.getToken();
+        
+        Map<String, String> body = new HashMap<>();
+        body.put("content_type", contentType);
+
+        Log.d(TAG, "uploadProfilePicture: Requesting upload URL for " + username + " with body=" + body);
+        RetrofitClient.getApiService().getUploadUrl(token, username, body).enqueue(new Callback<Map<String, String>>() {
+            @Override
+            public void onResponse(Call<Map<String, String>> call, Response<Map<String, String>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String uploadUrl = response.body().get("upload_url");
+                    Log.d(TAG, "uploadProfilePicture: SUCCESS. Got upload URL=" + uploadUrl);
+                    performActualUpload(uploadUrl, uri, contentType);
+                } else {
+                    Log.e(TAG, "uploadProfilePicture: FAILED. Code=" + response.code() + ", Body=" + response.body());
+                    Toast.makeText(SettingsActivity.this, "Upload failed (1)", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, String>> call, Throwable t) {
+                Log.e(TAG, "uploadProfilePicture: NETWORK ERROR getting upload URL", t);
+                Toast.makeText(SettingsActivity.this, "Network error", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void performActualUpload(final String uploadUrl, final Uri uri, final String contentType) {
+        Log.d(TAG, "performActualUpload: Starting PUT request to MinIO. URL=" + uploadUrl);
+        try {
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            final byte[] bytes = getBytes(inputStream);
+            Log.d(TAG, "performActualUpload: File read success. Size=" + bytes.length + " bytes");
+            
+            RequestBody requestBody = RequestBody.create(MediaType.parse(contentType), bytes);
+
+            RetrofitClient.getApiService().uploadImage(uploadUrl, requestBody).enqueue(new Callback<Void>() {
+                @Override
+                public void onResponse(Call<Void> call, Response<Void> response) {
+                    if (response.isSuccessful()) {
+                        Log.d(TAG, "performActualUpload: SUCCESS. MinIO upload complete.");
+                        markComplete(bytes.length);
+                    } else {
+                        Log.e(TAG, "performActualUpload: FAILED. Code=" + response.code());
+                        Toast.makeText(SettingsActivity.this, "Upload failed (2)", Toast.LENGTH_SHORT).show();
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<Void> call, Throwable t) {
+                    Log.e(TAG, "performActualUpload: NETWORK ERROR during MinIO upload", t);
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "performActualUpload: ERROR reading file from Uri", e);
+        }
+    }
+
+    private void markComplete(int size) {
+        final String username = Prefs.getUsername();
+        String token = "Bearer " + Prefs.getToken();
+        Map<String, Object> body = new HashMap<>();
+        body.put("size", size);
+
+        Log.d(TAG, "markComplete: Informing backend upload is finished. Username=" + username + ", size=" + size);
+        RetrofitClient.getApiService().markUploadComplete(token, username, body).enqueue(new Callback<Map<String, Object>>() {
+            @Override
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                if (response.isSuccessful()) {
+                    Log.d(TAG, "markComplete: SUCCESS. Backend acknowledged upload. Response=" + response.body());
+                    Toast.makeText(SettingsActivity.this, "Profile picture updated!", Toast.LENGTH_SHORT).show();
+                    ProfileUtils.clearCache(username);
+                    ProfileUtils.loadProfilePicture(SettingsActivity.this, username, imageViewAvatar);
+                } else {
+                    Log.e(TAG, "markComplete: FAILED. Code=" + response.code() + ", Body=" + response.body());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                Log.e(TAG, "markComplete: NETWORK ERROR", t);
+            }
+        });
+    }
+
+    public byte[] getBytes(InputStream inputStream) throws Exception {
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            byteBuffer.write(buffer, 0, len);
+        }
+        return byteBuffer.toByteArray();
     }
 
     @Override
