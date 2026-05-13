@@ -54,10 +54,8 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
-        Button buttonUploadAvatar = findViewById(R.id.buttonUploadAvatar);
         radioGroupTheme = findViewById(R.id.radioGroupTheme);
-        switchOnlineIndicator = findViewById(R.id.switchOnlineIndicator);
-        switchAutoDownload = findViewById(R.id.switchAutoDownload);
+
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
 
@@ -79,7 +77,6 @@ public class SettingsActivity extends AppCompatActivity {
             return true;
         });
 
-        buttonUploadAvatar.setOnClickListener(v -> openGallery());
 
         radioGroupTheme.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.radioLight) {
