@@ -2,6 +2,7 @@ package com.example.myapplication;
 
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
@@ -63,7 +64,7 @@ public class ChatActivity extends AppCompatActivity {
     private String oldestMessageTimestamp = null;
     private final int PAGE_SIZE = 20;
 
-    private Handler pollHandler = new Handler();
+    private Handler pollHandler = new Handler(Looper.getMainLooper());
     private Runnable pollRunnable;
     private final int POLL_INTERVAL = 2000;
 
@@ -201,51 +202,34 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
-/*
     private String decryptSafely(String ciphertext) {
         String secretB64 = Prefs.getSharedSecret(targetUserId);
         if (secretB64 == null) return "[Encrypted Message]";
+
         try {
-            return SignalManager.decrypt(ciphertext, Base64.decode(secretB64, Base64.NO_WRAP));
+            if (BuildConfig.DEBUG) {
+                Log.d("CryptoDebug", "1. Incoming Ciphertext (B64): " + ciphertext);
+                Log.d("CryptoDebug", "2. Shared Secret (B64): " + secretB64);
+            }
+
+            byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
+            return SignalManager.decrypt(ciphertext, keyBytes);
         } catch (Exception e) {
             Log.e(TAG, "Decryption failed", e);
+
+            if (BuildConfig.DEBUG) {
+                Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
+            }
+
             return "[Decryption Error]";
         }
     }
-*/
-private String decryptSafely(String ciphertext) {
-    String secretB64 = Prefs.getSharedSecret(targetUserId);
-    if (secretB64 == null) return "[Encrypted Message]";
-
-    try {
-        // --- ADD THESE LOGS ---
-        if (BuildConfig.DEBUG) {
-            Log.d("CryptoDebug", "1. Incoming Ciphertext (B64): " + ciphertext);
-            Log.d("CryptoDebug", "2. Shared Secret (B64): " + secretB64);
-        }
-        // ----------------------
-
-        byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
-        String decrypted = SignalManager.decrypt(ciphertext, keyBytes);
-
-        return decrypted;
-    } catch (Exception e) {
-        Log.e(TAG, "Decryption failed", e);
-
-        // --- ADD THIS LOG ---
-        if (BuildConfig.DEBUG) {
-            Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
-        }
-        // ----------------------
-
-        return "[Decryption Error]";
-    }
-}
-
-
 
     private void handleNewMessage(MessageResponse res) {
-        if (res == null || res.getId() == null) return;
+        if (res == null || res.getId() == null) {
+            return;
+        }
+
 
         if (!loadedMessageIds.contains(res.getId())) {
             boolean isMe = res.getSenderId().equals(Prefs.getUserId());

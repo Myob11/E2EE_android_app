@@ -13,7 +13,6 @@
         <!-- Status bar configuration: Same blue as Toolbar -->
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@color/primary</item>
-        <!-- false = white icons (visible on blue background) -->
         <item name="android:windowLightStatusBar">false</item>
 
         <!-- Explicit text colors for Light Theme -->

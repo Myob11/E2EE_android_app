@@ -30,6 +30,12 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+import android.view.Window;
+import android.view.WindowManager;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String TAG = "SettingsActivityDebug";
@@ -41,10 +47,27 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textViewUsernameDisplay;
     private Button buttonSwitchAccount;
 
+    private void applyStatusBar() {
+        Window window = getWindow();
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.setStatusBarColor(ContextCompat.getColor(this, R.color.primary));
+
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+        if (insetsController != null) {
+            // false = light (white) status bar icons
+            insetsController.setAppearanceLightStatusBars(false);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         setContentView(R.layout.activity_settings);
+
+        applyStatusBar();
 
         Toolbar toolbar = findViewById(R.id.settingsToolbar);
         setSupportActionBar(toolbar);
@@ -84,6 +107,7 @@ public class SettingsActivity extends AppCompatActivity {
             } else if (checkedId == R.id.radioDark) {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
             }
+            applyStatusBar();
         });
 
         buttonSwitchAccount.setOnClickListener(v -> {
