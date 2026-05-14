@@ -44,6 +44,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+
 public class ChatActivity extends AppCompatActivity {
 
     private static final String TAG = "ChatActivityDebug";
@@ -83,6 +84,10 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
+
+
+
+
 
         isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 
@@ -232,7 +237,7 @@ public class ChatActivity extends AppCompatActivity {
 
 
         if (!loadedMessageIds.contains(res.getId())) {
-            boolean isMe = res.getSenderId().equals(Prefs.getUserId());
+            boolean isMe = Prefs.getUserId() != null && Prefs.getUserId().equals(res.getSenderId());
             if (!isMe && !res.isRead()) {
                 markAsRead(res.getId());
                 res.setRead(true);
@@ -435,9 +440,10 @@ public class ChatActivity extends AppCompatActivity {
 
     private long parseIsoDate(String isoDate) {
         try {
+            if (isoDate == null) return System.currentTimeMillis();
             Date date = isoFormat.parse(isoDate);
             return date != null ? date.getTime() : System.currentTimeMillis();
-        } catch (ParseException e) {
+        } catch (Exception e) {
             return System.currentTimeMillis();
         }
     }
