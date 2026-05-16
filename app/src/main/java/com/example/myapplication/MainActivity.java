@@ -8,6 +8,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -28,7 +29,10 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-public class MainActivity extends AppCompatActivity implements ConversationsAdapter.OnConversationClickListener {
+
+public class MainActivity extends AppCompatActivity implements
+        ConversationsAdapter.OnConversationClickListener,
+        ConversationsAdapter.OnConversationLongClickListener {
 
     private static final String TAG = "MainActivityDebug";
 
@@ -54,7 +58,7 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         recyclerView = findViewById(R.id.recyclerViewConversations);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        adapter = new ConversationsAdapter(new ArrayList<>(), this);
+        adapter = new ConversationsAdapter(new ArrayList<>(), this, this);
         recyclerView.setAdapter(adapter);
 
         SearchView searchView = findViewById(R.id.searchView);
@@ -123,10 +127,10 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
     }
 
     private void loadData() {
-        String token = "Bearer " + Prefs.getToken();
+        String rawToken = Prefs.getToken();
         String userId = Prefs.getUserId();
-        
-        if (token == null || userId == null) return;
+        if (rawToken == null || userId == null) return;
+        String token = "Bearer " + rawToken;
 
         RetrofitClient.getApiService().getFriends(token, userId).enqueue(new Callback<List<User>>() {
             @Override
@@ -252,6 +256,102 @@ public class MainActivity extends AppCompatActivity implements ConversationsAdap
         intent.putExtra("targetUserId", conversation.getTargetUserId());
         intent.putExtra("contactName", conversation.getContactName());
         startActivity(intent);
+    }
+
+    @Override
+    public void onConversationLongClick(Conversation conversation) {
+        if (conversation == null || conversation.getChatId() == null || conversation.getChatId().isEmpty()) {
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Delete chat")
+                .setMessage("Delete this chat with " + conversation.getContactName() + "?")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete", (dialog, which) -> deleteChat(conversation))
+                .show();
+    }
+
+    private void deleteChat(Conversation conversation) {
+        String token = "Bearer " + Prefs.getToken();
+        String chatId = conversation.getChatId();
+
+        RetrofitClient.getApiService().deleteChat(token, chatId).enqueue(new Callback<Map<String, Object>>() {
+            @Override
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                if (response.isSuccessful()) {
+                    handleChatDeleted(conversation, chatId);
+                    return;
+                }
+
+                // Some deployments expose chat deletion as POST action routes.
+                if (response.code() == 405 || response.code() == 404) {
+                    tryDeleteChatViaPostAction(token, chatId, conversation);
+                } else {
+                    Toast.makeText(MainActivity.this, "Failed to delete chat (" + response.code() + ")", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                Toast.makeText(MainActivity.this, "Failed to delete chat", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void tryDeleteChatViaPostAction(String token, String chatId, Conversation conversation) {
+        RetrofitClient.getApiService().deleteChatPostAction(token, chatId).enqueue(new Callback<Map<String, Object>>() {
+            @Override
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                if (response.isSuccessful()) {
+                    handleChatDeleted(conversation, chatId);
+                    return;
+                }
+
+                if (response.code() == 404 || response.code() == 405) {
+                    tryDeleteChatViaPostRemove(token, chatId, conversation);
+                } else {
+                    Toast.makeText(MainActivity.this, "Failed to delete chat (" + response.code() + ")", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                Toast.makeText(MainActivity.this, "Failed to delete chat", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void tryDeleteChatViaPostRemove(String token, String chatId, Conversation conversation) {
+        RetrofitClient.getApiService().deleteChatPostRemove(token, chatId).enqueue(new Callback<Map<String, Object>>() {
+            @Override
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                if (response.isSuccessful()) {
+                    handleChatDeleted(conversation, chatId);
+                } else {
+                    Toast.makeText(MainActivity.this, "Delete endpoint not supported on server", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                Toast.makeText(MainActivity.this, "Failed to delete chat", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void handleChatDeleted(Conversation conversation, String chatId) {
+        chatConversations.removeIf(c -> chatId.equals(c.getChatId()));
+        if (conversation.getTargetUserId() != null) {
+            friendToChatId.remove(conversation.getTargetUserId());
+        }
+
+        if (isSearching) {
+            performSearch("");
+        } else {
+            adapter.updateData(chatConversations);
+        }
+        Toast.makeText(MainActivity.this, "Chat deleted", Toast.LENGTH_SHORT).show();
     }
 
     @Override

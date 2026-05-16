@@ -19,6 +19,7 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+
 public class FriendsActivity extends AppCompatActivity implements FriendsAdapter.OnFriendClickListener {
 
     private static final String TAG = "FriendsActivityDebug";
@@ -31,6 +32,10 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_friends);
+
+
+
+
 
         Log.d(TAG, "onCreate: Initializing FriendsActivity");
 
