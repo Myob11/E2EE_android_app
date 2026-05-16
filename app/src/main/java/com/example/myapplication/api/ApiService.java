@@ -84,4 +84,8 @@ public interface ApiService {
 
     @POST("/api/chats/{chat_id}/remove")
     Call<Map<String, Object>> deleteChatPostRemove(@Header("Authorization") String token, @Path("chat_id") String chatId);
+
+    // Delete the authenticated user account and cascade cleanup on backend
+    @DELETE("/api/users/me")
+    Call<Map<String, Object>> deleteMe(@Header("Authorization") String token);
 }

@@ -13,6 +13,8 @@ import android.widget.ImageView;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.EditText;
+import android.content.DialogInterface;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -43,6 +45,7 @@ public class SettingsActivity extends AppCompatActivity {
     private SwitchCompat switchAutoDownload;
     private TextView textViewUsernameDisplay;
     private Button buttonSwitchAccount;
+    private Button buttonDeleteProfile;
 
     private void applyStatusBar() {
         Window window = getWindow();
@@ -105,6 +108,71 @@ public class SettingsActivity extends AppCompatActivity {
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
+        });
+
+        buttonDeleteProfile = findViewById(R.id.buttonDeleteProfile);
+        buttonDeleteProfile.setOnClickListener(v -> showDeleteConfirmationDialog());
+    }
+
+    private void showDeleteConfirmationDialog() {
+        EditText input = new EditText(this);
+        input.setHint("Type DELETE to confirm");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Delete Profile")
+                .setMessage("This will permanently delete your account and all associated data. Type DELETE (all caps) to confirm.")
+                .setView(input)
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    String text = input.getText() != null ? input.getText().toString().trim() : "";
+                    if ("DELETE".equals(text)) {
+                        performAccountDeletion();
+                    } else {
+                        Toast.makeText(SettingsActivity.this, "Confirmation text mismatch. Type DELETE to confirm.", Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void performAccountDeletion() {
+        // Show a simple non-cancelable progress dialog
+        AlertDialog progress = new AlertDialog.Builder(this)
+                .setTitle("Deleting account")
+                .setMessage("Please wait while your account is being deleted...")
+                .setCancelable(false)
+                .create();
+        progress.show();
+
+        String token = "Bearer " + Prefs.getToken();
+        RetrofitClient.getApiService().deleteMe(token).enqueue(new Callback<Map<String, Object>>() {
+            @Override
+            public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
+                progress.dismiss();
+                if (response.isSuccessful()) {
+                    // Show success and navigate to login
+                    new AlertDialog.Builder(SettingsActivity.this)
+                            .setTitle("Account Deleted")
+                            .setMessage("Your account has been deleted successfully.")
+                            .setPositiveButton("OK", (dialog, which) -> {
+                                Prefs.clear();
+                                Intent intent = new Intent(SettingsActivity.this, LoginActivity.class);
+                                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                                startActivity(intent);
+                                finish();
+                            })
+                            .setCancelable(false)
+                            .show();
+                } else {
+                    String err = "Failed to delete account (" + response.code() + ")";
+                    Toast.makeText(SettingsActivity.this, err, Toast.LENGTH_LONG).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
+                progress.dismiss();
+                Toast.makeText(SettingsActivity.this, "Network error while deleting account", Toast.LENGTH_LONG).show();
+            }
         });
     }
 
