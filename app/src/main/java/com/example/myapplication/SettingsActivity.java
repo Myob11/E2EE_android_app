@@ -55,11 +55,14 @@ public class SettingsActivity extends AppCompatActivity {
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         Button buttonUploadAvatar = findViewById(R.id.buttonUploadAvatar);
         radioGroupTheme = findViewById(R.id.radioGroupTheme);
         switchOnlineIndicator = findViewById(R.id.switchOnlineIndicator);
         switchAutoDownload = findViewById(R.id.switchAutoDownload);
 =======
+=======
+>>>>>>> Stashed changes
         SwitchCompat switchTheme = findViewById(R.id.switchTheme);
 
 >>>>>>> Stashed changes

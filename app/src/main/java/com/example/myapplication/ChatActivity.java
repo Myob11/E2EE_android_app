@@ -49,6 +49,9 @@ import retrofit2.Response;
 =======
 
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 public class ChatActivity extends AppCompatActivity {
 
@@ -175,8 +178,11 @@ public class ChatActivity extends AppCompatActivity {
                 if (response.isSuccessful() && response.body() != null) {
                     try {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                         byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), response.body().getIdentityKey());
 =======
+=======
+>>>>>>> Stashed changes
                         byte[] secret = SignalManager.computeX3DHSharedSecret(
                                 Prefs.getIdentityPrivKey(),
                                 response.body().getIdentityKey(),
@@ -190,6 +196,9 @@ public class ChatActivity extends AppCompatActivity {
                                 + " identityKeyLastChars=" + response.body().getIdentityKey().substring(Math.max(0, response.body().getIdentityKey().length() - 8))
                                 + " signedPrekeyLastChars=" + response.body().getSignedPrekey().substring(Math.max(0, response.body().getSignedPrekey().length() - 8)));
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
                         Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
                         updateStatusUI("", false);
@@ -223,9 +232,12 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
     private String decryptSafely(String ciphertext) {
 =======
+=======
+>>>>>>> Stashed changes
     private String sha256Hex(byte[] data) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -245,10 +257,14 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private String decryptSafely(String messageId, String ciphertext, boolean isRetry) {
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         String secretB64 = Prefs.getSharedSecret(targetUserId);
         if (secretB64 == null) return "[Encrypted Message]";
         try {
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
             return SignalManager.decrypt(ciphertext, Base64.decode(secretB64, Base64.NO_WRAP));
         } catch (Exception e) {
@@ -260,6 +276,14 @@ public class ChatActivity extends AppCompatActivity {
                     + " retry=" + isRetry);
             return SignalManager.decrypt(ciphertext, keyBytes);
         } catch (Exception e) {
+=======
+            byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
+            Log.d(TAG, "DECRYPT_RECEIVE: messageId=" + messageId
+                    + " secretSHA256=" + sha256Hex(keyBytes)
+                    + " retry=" + isRetry);
+            return SignalManager.decrypt(ciphertext, keyBytes);
+        } catch (Exception e) {
+>>>>>>> Stashed changes
             Log.e(TAG, "Decryption failed for messageId=" + messageId + ", retry=" + isRetry, e);
 
             if (!isRetry && messageId != null && !decryptRetriedMessageIds.contains(messageId)) {
@@ -282,6 +306,40 @@ public class ChatActivity extends AppCompatActivity {
                     Log.w(TAG, "Rekey failed: key bundle response invalid for messageId=" + messageId);
                     return;
                 }
+<<<<<<< Updated upstream
+=======
+
+                try {
+                    byte[] newSecret = SignalManager.computeX3DHSharedSecret(
+                            Prefs.getIdentityPrivKey(),
+                            response.body().getIdentityKey(),
+                            response.body().getSignedPrekey(),
+                            response.body().getOneTimePrekey()
+                    );
+                    Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(newSecret, Base64.NO_WRAP));
+
+                    // Retry decrypt and patch message in list
+                    String retried = decryptSafely(messageId, ciphertext, true);
+                    replaceMessageTextById(messageId, retried);
+
+                    Log.d(TAG, "Rekey retry completed for messageId=" + messageId);
+                } catch (Exception ex) {
+                    Log.e(TAG, "Rekey computation failed for messageId=" + messageId, ex);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<KeyBundleResponse> call, Throwable t) {
+                Log.e(TAG, "Rekey request failed for messageId=" + messageId, t);
+            }
+        });
+    }
+
+    private void handleNewMessage(MessageResponse res) {
+        if (res == null || res.getId() == null) {
+            return;
+        }
+>>>>>>> Stashed changes
 
                 try {
                     byte[] newSecret = SignalManager.computeX3DHSharedSecret(

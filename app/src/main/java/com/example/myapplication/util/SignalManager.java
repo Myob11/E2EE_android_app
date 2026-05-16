@@ -54,9 +54,12 @@ public class SignalManager {
         byte[] iv = new byte[GCM_IV_LENGTH];
         new SecureRandom().nextBytes(iv);
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         
         SecretKeySpec keySpec = new SecretKeySpec(sharedSecret, 0, 16, "AES"); // Use first 128 bits
 =======
+=======
+>>>>>>> Stashed changes
 
         SecretKeySpec keySpec = new SecretKeySpec(aesKey, 0, 16, "AES");
 >>>>>>> Stashed changes
@@ -83,6 +86,7 @@ public class SignalManager {
 
     public static String decrypt(String base64Ciphertext, byte[] sharedSecret) throws Exception {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         byte[] combined = Base64.decode(base64Ciphertext, Base64.NO_WRAP);
         
         Cipher cipher = Cipher.getInstance(AES_GCM);
@@ -94,6 +98,8 @@ public class SignalManager {
         
         return new String(plaintext);
 =======
+=======
+>>>>>>> Stashed changes
         if (base64Ciphertext == null) {
             throw new IllegalArgumentException("base64Ciphertext is null");
         }
@@ -257,5 +263,8 @@ public class SignalManager {
             return false;
         }
     }
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 }
