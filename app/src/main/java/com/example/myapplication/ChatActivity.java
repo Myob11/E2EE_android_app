@@ -15,7 +15,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.example.myapplication.BuildConfig;
 import com.example.myapplication.api.Chat;
 import com.example.myapplication.api.KeyBundleResponse;
 import com.example.myapplication.api.MessageRequest;
@@ -312,19 +311,15 @@ public class ChatActivity extends AppCompatActivity {
         if (secretB64 == null) return "[Encrypted Message]";
 
         try {
-            if (BuildConfig.DEBUG) {
-                Log.d("CryptoDebug", "1. Incoming Ciphertext (B64): " + ciphertext);
-                Log.d("CryptoDebug", "2. Shared Secret (B64): " + secretB64);
-            }
+            Log.d("CryptoDebug", "1. Incoming Ciphertext (B64): " + ciphertext);
+            Log.d("CryptoDebug", "2. Shared Secret (B64): " + secretB64);
 
             byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
             return SignalManager.decrypt(ciphertext, keyBytes);
         } catch (Exception e) {
             Log.e(TAG, "Decryption failed", e);
 
-            if (BuildConfig.DEBUG) {
-                Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
-            }
+            Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
 
             return "[Decryption Error]";
         }
