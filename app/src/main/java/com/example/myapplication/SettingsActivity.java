@@ -6,8 +6,6 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Window;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RadioGroup;
@@ -32,7 +30,6 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String TAG = "SettingsActivityDebug";
@@ -44,19 +41,10 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView textViewUsernameDisplay;
     private Button buttonSwitchAccount;
 
-    private void applyStatusBar() {
-        Window window = getWindow();
-        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setContentView(R.layout.activity_settings);
-
-        applyStatusBar();
 
         Toolbar toolbar = findViewById(R.id.settingsToolbar);
         setSupportActionBar(toolbar);
@@ -66,8 +54,10 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
+        Button buttonUploadAvatar = findViewById(R.id.buttonUploadAvatar);
         radioGroupTheme = findViewById(R.id.radioGroupTheme);
-
+        switchOnlineIndicator = findViewById(R.id.switchOnlineIndicator);
+        switchAutoDownload = findViewById(R.id.switchAutoDownload);
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
 
@@ -89,6 +79,7 @@ public class SettingsActivity extends AppCompatActivity {
             return true;
         });
 
+        buttonUploadAvatar.setOnClickListener(v -> openGallery());
 
         radioGroupTheme.setOnCheckedChangeListener((group, checkedId) -> {
             if (checkedId == R.id.radioLight) {
@@ -96,7 +87,6 @@ public class SettingsActivity extends AppCompatActivity {
             } else if (checkedId == R.id.radioDark) {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
             }
-            applyStatusBar();
         });
 
         buttonSwitchAccount.setOnClickListener(v -> {
