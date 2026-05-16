@@ -45,6 +45,11 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+<<<<<<< Updated upstream
+=======
+
+
+>>>>>>> Stashed changes
 public class ChatActivity extends AppCompatActivity {
 
     private static final String TAG = "ChatActivityDebug";
@@ -169,7 +174,23 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     try {
+<<<<<<< Updated upstream
                         byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), response.body().getIdentityKey());
+=======
+                        byte[] secret = SignalManager.computeX3DHSharedSecret(
+                                Prefs.getIdentityPrivKey(),
+                                response.body().getIdentityKey(),
+                                response.body().getSignedPrekey(),
+                                response.body().getOneTimePrekey()
+                        );
+
+                        // Log fingerprint of newly computed secret
+                        Log.d(TAG, "KEY_BUNDLE_FETCH: computed sharedSecretSHA256=" + sha256Hex(secret)
+                                + " targetUserId=" + targetUserId
+                                + " identityKeyLastChars=" + response.body().getIdentityKey().substring(Math.max(0, response.body().getIdentityKey().length() - 8))
+                                + " signedPrekeyLastChars=" + response.body().getSignedPrekey().substring(Math.max(0, response.body().getSignedPrekey().length() - 8)));
+
+>>>>>>> Stashed changes
                         Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
                         updateStatusUI("", false);
                         encryptAndSendMessage(plaintext, secret);
@@ -201,14 +222,53 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
+<<<<<<< Updated upstream
 
     private String decryptSafely(String ciphertext) {
+=======
+    private String sha256Hex(byte[] data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b & 0xff));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "sha256-fail";
+        }
+    }
+
+    private String decryptSafely(String messageId, String ciphertext) {
+        return decryptSafely(messageId, ciphertext, false);
+    }
+
+    private String decryptSafely(String messageId, String ciphertext, boolean isRetry) {
+>>>>>>> Stashed changes
         String secretB64 = Prefs.getSharedSecret(targetUserId);
         if (secretB64 == null) return "[Encrypted Message]";
         try {
+<<<<<<< Updated upstream
             return SignalManager.decrypt(ciphertext, Base64.decode(secretB64, Base64.NO_WRAP));
         } catch (Exception e) {
             Log.e(TAG, "Decryption failed", e);
+=======
+            byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
+            Log.d(TAG, "DECRYPT_RECEIVE: messageId=" + messageId
+                    + " secretSHA256=" + sha256Hex(keyBytes)
+                    + " retry=" + isRetry);
+            return SignalManager.decrypt(ciphertext, keyBytes);
+        } catch (Exception e) {
+            Log.e(TAG, "Decryption failed for messageId=" + messageId + ", retry=" + isRetry, e);
+
+            if (!isRetry && messageId != null && !decryptRetriedMessageIds.contains(messageId)) {
+                decryptRetriedMessageIds.add(messageId);
+                rekeyAndRetryMessage(messageId, ciphertext);
+                return "[Decrypting...]";
+            }
+
+>>>>>>> Stashed changes
             return "[Decryption Error]";
         }
     }

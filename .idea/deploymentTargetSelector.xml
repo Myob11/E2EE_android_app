@@ -3,8 +3,13 @@
   <component name="deploymentTargetSelector">
     <selectionStates>
       <SelectionState runConfigName="app">
+<<<<<<< Updated upstream
         <option name="selectionMode" value="DROPDOWN" />
         <DropdownSelection timestamp="2026-04-24T16:42:09.272338800Z">
+=======
+        <option name="selectionMode" value="DIALOG" />
+        <DropdownSelection timestamp="2026-05-16T09:15:55.832283600Z">
+>>>>>>> Stashed changes
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\marti\.android\avd\Medium_Phone.avd" />
