@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.example.myapplication.BuildConfig;
 import com.example.myapplication.api.Chat;
 import com.example.myapplication.api.KeyBundleResponse;
 import com.example.myapplication.api.MessageRequest;
@@ -49,6 +50,10 @@ public class ChatActivity extends AppCompatActivity {
 
     private static final String TAG = "ChatActivityDebug";
 
+    private interface SharedSecretCallback {
+        void onReady();
+    }
+
     private RecyclerView recyclerView;
     private MessagesAdapter adapter;
     private List<Message> messageList = new ArrayList<>();
@@ -79,6 +84,108 @@ public class ChatActivity extends AppCompatActivity {
     private Gson gson = new Gson();
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+
+    private String resolvePeerUserId(String senderId) {
+        String myUserId = Prefs.getUserId();
+        if (senderId == null) return targetUserId;
+        if (myUserId != null && myUserId.equals(senderId)) return targetUserId;
+        return senderId;
+    }
+
+    private String truncateKey(String value) {
+        if (value == null) return "null";
+        if (value.length() <= 16) return value;
+        return value.substring(0, 8) + "..." + value.substring(value.length() - 8);
+    }
+
+    private void deriveAndCacheSharedSecret(String peerUserId, String peerPublicKey, SharedSecretCallback onReady, Runnable onFailure) {
+        try {
+            String myIdentityPriv = Prefs.getIdentityPrivKey();
+            if (myIdentityPriv == null) {
+                throw new IllegalStateException("Local identity private key is missing");
+            }
+
+            byte[] secret = SignalManager.computeSharedSecret(myIdentityPriv, peerPublicKey);
+            String secretB64 = Base64.encodeToString(secret, Base64.NO_WRAP);
+            Prefs.saveSharedSecret(peerUserId, secretB64);
+            Log.d(TAG, "Derived shared secret for " + peerUserId + " = " + truncateKey(secretB64));
+            if (onReady != null) onReady.onReady();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to derive shared secret for " + peerUserId, e);
+            if (onFailure != null) onFailure.run();
+        }
+    }
+
+    private void fetchPeerIdentityAndCacheSecret(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
+        String token = Prefs.getToken();
+        if (token == null) {
+            if (onFailure != null) onFailure.run();
+            return;
+        }
+
+        RetrofitClient.getApiService().getPublicKey(peerUserId).enqueue(new Callback<Map<String, String>>() {
+            @Override
+            public void onResponse(Call<Map<String, String>> call, Response<Map<String, String>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String peerPublicKey = response.body().get("public_key");
+                    if (peerPublicKey != null && !peerPublicKey.isEmpty()) {
+                        deriveAndCacheSharedSecret(peerUserId, peerPublicKey, onReady, onFailure);
+                        return;
+                    }
+                }
+
+                Log.w(TAG, "Public key endpoint did not return a usable key for " + peerUserId + ", falling back to bundle endpoint");
+                fetchPeerBundleAndCacheSecret(peerUserId, onReady, onFailure);
+            }
+
+            @Override
+            public void onFailure(Call<Map<String, String>> call, Throwable t) {
+                Log.e(TAG, "Failed to fetch public key for " + peerUserId, t);
+                fetchPeerBundleAndCacheSecret(peerUserId, onReady, onFailure);
+            }
+        });
+    }
+
+    private void fetchPeerBundleAndCacheSecret(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
+        String token = Prefs.getToken();
+        if (token == null) {
+            if (onFailure != null) onFailure.run();
+            return;
+        }
+
+        RetrofitClient.getApiService().getKeyBundle("Bearer " + token, peerUserId).enqueue(new Callback<KeyBundleResponse>() {
+            @Override
+            public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().getIdentityKey() != null) {
+                    deriveAndCacheSharedSecret(peerUserId, response.body().getIdentityKey(), onReady, onFailure);
+                } else {
+                    Log.e(TAG, "Failed to fetch key bundle for " + peerUserId + ", responseCode=" + response.code());
+                    if (onFailure != null) onFailure.run();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<KeyBundleResponse> call, Throwable t) {
+                Log.e(TAG, "Failed to fetch key bundle for " + peerUserId, t);
+                if (onFailure != null) onFailure.run();
+            }
+        });
+    }
+
+    private void ensureSharedSecretForPeer(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
+        if (peerUserId == null) {
+            if (onFailure != null) onFailure.run();
+            return;
+        }
+
+        String secretB64 = Prefs.getSharedSecret(peerUserId);
+        if (secretB64 != null) {
+            if (onReady != null) onReady.onReady();
+            return;
+        }
+
+        fetchPeerIdentityAndCacheSecret(peerUserId, onReady, onFailure);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,8 +237,21 @@ public class ChatActivity extends AppCompatActivity {
         });
 
         if (chatId != null) {
-            fetchMessages(null, true);
-            startWebSocket();
+            if (targetUserId != null && Prefs.getSharedSecret(targetUserId) == null) {
+                updateStatusUI("Establishing secure connection...", true);
+                ensureSharedSecretForPeer(targetUserId, () -> {
+                    updateStatusUI("", false);
+                    fetchMessages(null, true);
+                    startWebSocket();
+                }, () -> {
+                    updateStatusUI("", false);
+                    fetchMessages(null, true);
+                    startWebSocket();
+                });
+            } else {
+                fetchMessages(null, true);
+                startWebSocket();
+            }
         }
 
         buttonSend.setOnClickListener(v -> {
@@ -154,43 +274,23 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void prepareAndSendMessage(String text) {
-        String secretB64 = Prefs.getSharedSecret(targetUserId);
-        if (secretB64 == null) {
-            updateStatusUI("Establishing secure connection...", true);
-            fetchBundleAndEncrypt(text);
-        } else {
-            encryptAndSendMessage(text, Base64.decode(secretB64, Base64.NO_WRAP));
+        if (targetUserId == null) {
+            Toast.makeText(this, "Missing chat participant", Toast.LENGTH_SHORT).show();
+            return;
         }
-    }
 
-    private void fetchBundleAndEncrypt(String plaintext) {
-        String token = "Bearer " + Prefs.getToken();
-        RetrofitClient.getApiService().getKeyBundle(token, targetUserId).enqueue(new Callback<KeyBundleResponse>() {
-            @Override
-            public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    try {
-                        // Use X3DH-style key agreement with recipient's identity, signed prekey, and one-time prekey
-                        byte[] secret = SignalManager.computeX3DHSharedSecret(
-                            Prefs.getIdentityPrivKey(),
-                            response.body().getIdentityKey(),
-                            response.body().getSignedPrekey(),
-                            response.body().getOneTimePrekey()
-                        );
-                        Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
-                        updateStatusUI("", false);
-                        encryptAndSendMessage(plaintext, secret);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Failed to compute secret", e);
-                        Toast.makeText(ChatActivity.this, "Security handshake failed", Toast.LENGTH_SHORT).show();
-                    }
-                }
+        ensureSharedSecretForPeer(targetUserId, () -> {
+            String secretB64 = Prefs.getSharedSecret(targetUserId);
+            if (secretB64 == null) {
+                Toast.makeText(ChatActivity.this, "Failed to establish secure connection", Toast.LENGTH_SHORT).show();
+                return;
             }
 
-            @Override
-            public void onFailure(Call<KeyBundleResponse> call, Throwable t) {
-                Toast.makeText(ChatActivity.this, "Failed to fetch security keys", Toast.LENGTH_SHORT).show();
-            }
+            updateStatusUI("", false);
+            encryptAndSendMessage(text, Base64.decode(secretB64, Base64.NO_WRAP));
+        }, () -> {
+            updateStatusUI("", false);
+            Toast.makeText(ChatActivity.this, "Failed to fetch security keys", Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -207,8 +307,8 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
-    private String decryptSafely(String ciphertext) {
-        String secretB64 = Prefs.getSharedSecret(targetUserId);
+    private String decryptSafely(String peerUserId, String ciphertext) {
+        String secretB64 = Prefs.getSharedSecret(peerUserId);
         if (secretB64 == null) return "[Encrypted Message]";
 
         try {
@@ -235,20 +335,28 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
 
-
         if (!loadedMessageIds.contains(res.getId())) {
             boolean isMe = Prefs.getUserId() != null && Prefs.getUserId().equals(res.getSenderId());
+            String peerUserId = resolvePeerUserId(res.getSenderId());
             if (!isMe && !res.isRead()) {
                 markAsRead(res.getId());
                 res.setRead(true);
             }
 
-            String decryptedContent = decryptSafely(res.getCiphertext());
-            Message msg = new Message(res.getId(), decryptedContent, isMe, parseIsoDate(res.getCreatedAt()), res.isRead());
-            messageList.add(msg);
-            loadedMessageIds.add(res.getId());
-            adapter.updateMessages(messageList);
-            recyclerView.smoothScrollToPosition(messageList.size() - 1);
+            ensureSharedSecretForPeer(peerUserId, () -> runOnUiThread(() -> {
+                String decryptedContent = decryptSafely(peerUserId, res.getCiphertext());
+                Message msg = new Message(res.getId(), decryptedContent, isMe, parseIsoDate(res.getCreatedAt()), res.isRead());
+                messageList.add(msg);
+                loadedMessageIds.add(res.getId());
+                adapter.updateMessages(messageList);
+                recyclerView.smoothScrollToPosition(messageList.size() - 1);
+            }), () -> runOnUiThread(() -> {
+                Message msg = new Message(res.getId(), "[Encrypted Message]", isMe, parseIsoDate(res.getCreatedAt()), res.isRead());
+                messageList.add(msg);
+                loadedMessageIds.add(res.getId());
+                adapter.updateMessages(messageList);
+                recyclerView.smoothScrollToPosition(messageList.size() - 1);
+            }));
         } else {
             updateExistingMessageReadStatus(res.getId(), res.isRead());
             adapter.updateMessages(messageList);
@@ -271,11 +379,12 @@ public class ChatActivity extends AppCompatActivity {
                         MessageResponse res = newResponses.get(i);
                         if (!loadedMessageIds.contains(res.getId())) {
                             boolean isMe = res.getSenderId().equals(Prefs.getUserId());
+                            String peerUserId = resolvePeerUserId(res.getSenderId());
                             if (!isMe && !res.isRead()) {
                                 markAsRead(res.getId());
                                 res.setRead(true);
                             }
-                            String content = decryptSafely(res.getCiphertext());
+                            String content = decryptSafely(peerUserId, res.getCiphertext());
                             processedMessages.add(new Message(res.getId(), content, isMe, parseIsoDate(res.getCreatedAt()), res.isRead()));
                             loadedMessageIds.add(res.getId());
                         } else {
