@@ -2,7 +2,6 @@ package com.example.myapplication;
 
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
@@ -46,8 +45,6 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-
-
 public class ChatActivity extends AppCompatActivity {
 
     private static final String TAG = "ChatActivityDebug";
@@ -68,7 +65,7 @@ public class ChatActivity extends AppCompatActivity {
     private String oldestMessageTimestamp = null;
     private final int PAGE_SIZE = 20;
 
-    private Handler pollHandler = new Handler(Looper.getMainLooper());
+    private Handler pollHandler = new Handler();
     private Runnable pollRunnable;
     private final int POLL_INTERVAL = 2000;
 
@@ -89,10 +86,6 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
-
-
-
-
 
         isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 
@@ -176,19 +169,7 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     try {
-                        byte[] secret = SignalManager.computeX3DHSharedSecret(
-                                Prefs.getIdentityPrivKey(),
-                                response.body().getIdentityKey(),
-                                response.body().getSignedPrekey(),
-                                response.body().getOneTimePrekey()
-                        );
-
-                        // Log fingerprint of newly computed secret
-                        Log.d(TAG, "KEY_BUNDLE_FETCH: computed sharedSecretSHA256=" + sha256Hex(secret)
-                                + " targetUserId=" + targetUserId
-                                + " identityKeyLastChars=" + response.body().getIdentityKey().substring(Math.max(0, response.body().getIdentityKey().length() - 8))
-                                + " signedPrekeyLastChars=" + response.body().getSignedPrekey().substring(Math.max(0, response.body().getSignedPrekey().length() - 8)));
-
+                        byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), response.body().getIdentityKey());
                         Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
                         updateStatusUI("", false);
                         encryptAndSendMessage(plaintext, secret);
@@ -220,43 +201,14 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
-    private String sha256Hex(byte[] data) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(data);
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(String.format("%02x", b & 0xff));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            return "sha256-fail";
-        }
-    }
 
-    private String decryptSafely(String messageId, String ciphertext) {
-        return decryptSafely(messageId, ciphertext, false);
-    }
-
-    private String decryptSafely(String messageId, String ciphertext, boolean isRetry) {
+    private String decryptSafely(String ciphertext) {
         String secretB64 = Prefs.getSharedSecret(targetUserId);
         if (secretB64 == null) return "[Encrypted Message]";
-
         try {
-            byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
-            Log.d(TAG, "DECRYPT_RECEIVE: messageId=" + messageId
-                    + " secretSHA256=" + sha256Hex(keyBytes)
-                    + " retry=" + isRetry);
-            return SignalManager.decrypt(ciphertext, keyBytes);
+            return SignalManager.decrypt(ciphertext, Base64.decode(secretB64, Base64.NO_WRAP));
         } catch (Exception e) {
-            Log.e(TAG, "Decryption failed for messageId=" + messageId + ", retry=" + isRetry, e);
-
-            if (!isRetry && messageId != null && !decryptRetriedMessageIds.contains(messageId)) {
-                decryptRetriedMessageIds.add(messageId);
-                rekeyAndRetryMessage(messageId, ciphertext);
-                return "[Decrypting...]";
-            }
-
+            Log.e(TAG, "Decryption failed", e);
             return "[Decryption Error]";
         }
     }
@@ -298,13 +250,10 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void handleNewMessage(MessageResponse res) {
-        if (res == null || res.getId() == null) {
-            return;
-        }
-
+        if (res == null || res.getId() == null) return;
 
         if (!loadedMessageIds.contains(res.getId())) {
-            boolean isMe = Prefs.getUserId() != null && Prefs.getUserId().equals(res.getSenderId());
+            boolean isMe = res.getSenderId().equals(Prefs.getUserId());
             if (!isMe && !res.isRead()) {
                 markAsRead(res.getId());
                 res.setRead(true);
@@ -507,10 +456,9 @@ public class ChatActivity extends AppCompatActivity {
 
     private long parseIsoDate(String isoDate) {
         try {
-            if (isoDate == null) return System.currentTimeMillis();
             Date date = isoFormat.parse(isoDate);
             return date != null ? date.getTime() : System.currentTimeMillis();
-        } catch (Exception e) {
+        } catch (ParseException e) {
             return System.currentTimeMillis();
         }
     }

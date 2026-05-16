@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
     tools:context=".SettingsActivity">
 
     <androidx.appcompat.widget.Toolbar
@@ -32,7 +33,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/profile"
+                android:text="Profile"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -46,10 +47,18 @@
                     android:id="@+id/imageViewAvatar"
                     android:layout_width="100dp"
                     android:layout_height="100dp"
-                    android:contentDescription="@string/image_avatar"
                     android:src="@mipmap/ic_launcher_round"
                     android:layout_centerHorizontal="true" />
 
+                <Button
+                    android:id="@+id/buttonUploadAvatar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/imageViewAvatar"
+                    android:layout_centerHorizontal="true"
+                    android:layout_marginTop="8dp"
+                    android:text="Change Avatar"
+                    style="@style/Widget.AppCompat.Button.Borderless.Colored" />
 
 
 
@@ -76,7 +85,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/Theme"
+                android:text="Appearance"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -87,30 +96,77 @@
                 android:gravity="center_vertical"
                 android:layout_marginTop="8dp">
 
-                <TextView
-                    android:layout_width="0dp"
+                <RadioButton
+                    android:id="@+id/radioLight"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Dark Mode"
-                    android:textSize="16sp" />
+                    android:text="Light Theme" />
 
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switchTheme"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                <RadioButton
+                    android:id="@+id/radioDark"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Dark Theme" />
+            </RadioGroup>
 
-            </LinearLayout>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="#DDDDDD" />
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Photos &amp; Media"
+                android:textSize="18sp"
+                android:textStyle="bold" />
 
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchAutoDownload"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Auto-download Media"
+                android:padding="8dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="#DDDDDD" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Privacy"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchOnlineIndicator"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Show Online Indicator"
+                android:padding="8dp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="#DDDDDD" />
 
             <Button
                 android:id="@+id/buttonSwitchAccount"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/switch_account"
+                android:text="Switch Account"
                 style="@style/Widget.AppCompat.Button.Colored"
-                android:layout_marginTop="8dp"
-                android:layout_gravity="center_horizontal" />
+                android:layout_marginTop="8dp" />
 
         </LinearLayout>
     </ScrollView>
