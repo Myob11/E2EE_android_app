@@ -24,6 +24,9 @@ public interface ApiService {
     @GET("/api/users/me")
     Call<User> getMe(@Header("Authorization") String token);
 
+    @GET("/api/users/{user_id}/public-key")
+    Call<Map<String, String>> getPublicKey(@Path("user_id") String userId);
+
     @GET("/api/users")
     Call<List<User>> searchUsers(@Header("Authorization") String token, @Query("query") String query);
 

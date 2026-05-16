@@ -2,6 +2,8 @@ package com.example.myapplication;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
@@ -43,6 +45,10 @@ public class MainActivity extends AppCompatActivity implements
     private Map<String, String> friendNames = new HashMap<>();
     private Map<String, String> friendToChatId = new HashMap<>();
     private boolean isSearching = false;
+
+    private Handler refreshHandler = new Handler(Looper.getMainLooper());
+    private Runnable refreshRunnable;
+    private static final int REFRESH_INTERVAL = 5000; // 5 seconds
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,6 +102,21 @@ public class MainActivity extends AppCompatActivity implements
                 adapter.updateData(chatConversations);
             });
         }
+
+        // Set up auto-refresh runnable
+        setupAutoRefresh();
+    }
+
+    private void setupAutoRefresh() {
+        refreshRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!isSearching) {
+                    loadData();
+                }
+                refreshHandler.postDelayed(this, REFRESH_INTERVAL);
+            }
+        };
     }
 
     private void performSearch(String query) {
@@ -123,7 +144,33 @@ public class MainActivity extends AppCompatActivity implements
         super.onResume();
         if (!isSearching) {
             loadData();
+            startAutoRefresh();
         }
+    }
+
+    private void startAutoRefresh() {
+        if (refreshRunnable != null) {
+            refreshHandler.removeCallbacks(refreshRunnable);
+            refreshHandler.postDelayed(refreshRunnable, REFRESH_INTERVAL);
+        }
+    }
+
+    private void stopAutoRefresh() {
+        if (refreshRunnable != null) {
+            refreshHandler.removeCallbacks(refreshRunnable);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopAutoRefresh();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopAutoRefresh();
     }
 
     private void loadData() {

@@ -104,4 +104,18 @@ public class Prefs {
     public static void clear() {
         sharedPreferences.edit().clear().apply();
     }
+
+    /**
+     * Clear only session data (token, user_id, username) while preserving device keys
+     * (identity keys, signed prekey, registration ID) and shared secrets. This ensures
+     * that device keys persist across login/logout cycles and messages encrypted with
+     * old keys can still be decrypted.
+     */
+    public static void clearSessionOnly() {
+        sharedPreferences.edit()
+                .remove(KEY_TOKEN)
+                .remove(KEY_USER_ID)
+                .remove(KEY_USERNAME)
+                .apply();
+    }
 }
