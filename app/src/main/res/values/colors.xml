@@ -6,6 +6,4 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="gray_light">#F0F2F5</color>
-    <color name="status_bar_light">#0084FF</color>
-    <color name="status_bar_dark">#0050A0</color>
 </resources>

@@ -22,25 +22,15 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
     private List<Conversation> conversations;
     private List<Conversation> filteredList;
     private OnConversationClickListener listener;
-    private OnConversationLongClickListener longClickListener;
 
     public interface OnConversationClickListener {
         void onConversationClick(Conversation conversation);
     }
 
-    public interface OnConversationLongClickListener {
-        void onConversationLongClick(Conversation conversation);
-    }
-
-    public ConversationsAdapter(
-            List<Conversation> conversations,
-            OnConversationClickListener listener,
-            OnConversationLongClickListener longClickListener
-    ) {
+    public ConversationsAdapter(List<Conversation> conversations, OnConversationClickListener listener) {
         this.conversations = conversations;
         this.filteredList = new ArrayList<>(conversations);
         this.listener = listener;
-        this.longClickListener = longClickListener;
     }
 
     public void updateData(List<Conversation> newList) {
@@ -110,14 +100,6 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         
         holder.itemView.setOnClickListener(v -> {
             listener.onConversationClick(conversation);
-        });
-
-        holder.itemView.setOnLongClickListener(v -> {
-            if (longClickListener != null) {
-                longClickListener.onConversationLongClick(conversation);
-                return true;
-            }
-            return false;
         });
     }
 
