@@ -38,7 +38,6 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String TAG = "SettingsActivityDebug";
     private static final int PICK_IMAGE_REQUEST = 1;
     private ImageView imageViewAvatar;
-    private RadioGroup radioGroupTheme;
     private SwitchCompat switchOnlineIndicator;
     private SwitchCompat switchAutoDownload;
     private TextView textViewUsernameDisplay;
@@ -60,13 +59,14 @@ public class SettingsActivity extends AppCompatActivity {
 
         Toolbar toolbar = findViewById(R.id.settingsToolbar);
         setSupportActionBar(toolbar);
+
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle("Settings");
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         }
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
-        radioGroupTheme = findViewById(R.id.radioGroupTheme);
+        SwitchCompat switchTheme = findViewById(R.id.switchTheme);
 
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
@@ -90,11 +90,15 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
 
-        radioGroupTheme.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.radioLight) {
-                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-            } else if (checkedId == R.id.radioDark) {
+// Set initial state based on current theme
+        boolean isDarkMode = AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES;
+        switchTheme.setChecked(isDarkMode);
+
+        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+            } else {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
             }
             applyStatusBar();
         });
@@ -234,6 +238,13 @@ public class SettingsActivity extends AppCompatActivity {
         return byteBuffer.toByteArray();
     }
 
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();

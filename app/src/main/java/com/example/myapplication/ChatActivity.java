@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
@@ -21,6 +22,7 @@ import com.example.myapplication.api.MessageRequest;
 import com.example.myapplication.api.MessageResponse;
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.util.Prefs;
+import com.example.myapplication.util.ProfileUtils;
 import com.example.myapplication.util.SignalManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -43,6 +45,7 @@ import okhttp3.WebSocketListener;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+
 
 
 public class ChatActivity extends AppCompatActivity {
@@ -80,6 +83,8 @@ public class ChatActivity extends AppCompatActivity {
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
 
+    private final java.util.Set<String> decryptRetriedMessageIds = new java.util.HashSet<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -97,9 +102,10 @@ public class ChatActivity extends AppCompatActivity {
 
         Toolbar toolbar = findViewById(R.id.chatToolbar);
         setSupportActionBar(toolbar);
+
         if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(contactName != null ? contactName : "Chat");
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setDisplayShowTitleEnabled(false);
         }
 
         recyclerView = findViewById(R.id.recyclerViewMessages);
@@ -170,13 +176,19 @@ public class ChatActivity extends AppCompatActivity {
             public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     try {
-                        // Use X3DH-style key agreement with recipient's identity, signed prekey, and one-time prekey
                         byte[] secret = SignalManager.computeX3DHSharedSecret(
-                            Prefs.getIdentityPrivKey(),
-                            response.body().getIdentityKey(),
-                            response.body().getSignedPrekey(),
-                            response.body().getOneTimePrekey()
+                                Prefs.getIdentityPrivKey(),
+                                response.body().getIdentityKey(),
+                                response.body().getSignedPrekey(),
+                                response.body().getOneTimePrekey()
                         );
+
+                        // Log fingerprint of newly computed secret
+                        Log.d(TAG, "KEY_BUNDLE_FETCH: computed sharedSecretSHA256=" + sha256Hex(secret)
+                                + " targetUserId=" + targetUserId
+                                + " identityKeyLastChars=" + response.body().getIdentityKey().substring(Math.max(0, response.body().getIdentityKey().length() - 8))
+                                + " signedPrekeyLastChars=" + response.body().getSignedPrekey().substring(Math.max(0, response.body().getSignedPrekey().length() - 8)));
+
                         Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(secret, Base64.NO_WRAP));
                         updateStatusUI("", false);
                         encryptAndSendMessage(plaintext, secret);
@@ -196,6 +208,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private void encryptAndSendMessage(String plaintext, byte[] secret) {
         try {
+            Log.d(TAG, "ENCRYPT_SEND: secretSHA256=" + sha256Hex(secret));
             String ciphertext = SignalManager.encrypt(plaintext, secret);
             if (chatId == null) {
                 createChatAndSendCiphertext(ciphertext, plaintext);
@@ -207,27 +220,81 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
-    private String decryptSafely(String ciphertext) {
+    private String sha256Hex(byte[] data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b & 0xff));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "sha256-fail";
+        }
+    }
+
+    private String decryptSafely(String messageId, String ciphertext) {
+        return decryptSafely(messageId, ciphertext, false);
+    }
+
+    private String decryptSafely(String messageId, String ciphertext, boolean isRetry) {
         String secretB64 = Prefs.getSharedSecret(targetUserId);
         if (secretB64 == null) return "[Encrypted Message]";
 
         try {
-            if (BuildConfig.DEBUG) {
-                Log.d("CryptoDebug", "1. Incoming Ciphertext (B64): " + ciphertext);
-                Log.d("CryptoDebug", "2. Shared Secret (B64): " + secretB64);
-            }
-
             byte[] keyBytes = Base64.decode(secretB64, Base64.NO_WRAP);
+            Log.d(TAG, "DECRYPT_RECEIVE: messageId=" + messageId
+                    + " secretSHA256=" + sha256Hex(keyBytes)
+                    + " retry=" + isRetry);
             return SignalManager.decrypt(ciphertext, keyBytes);
         } catch (Exception e) {
-            Log.e(TAG, "Decryption failed", e);
+            Log.e(TAG, "Decryption failed for messageId=" + messageId + ", retry=" + isRetry, e);
 
-            if (BuildConfig.DEBUG) {
-                Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
+            if (!isRetry && messageId != null && !decryptRetriedMessageIds.contains(messageId)) {
+                decryptRetriedMessageIds.add(messageId);
+                rekeyAndRetryMessage(messageId, ciphertext);
+                return "[Decrypting...]";
             }
 
             return "[Decryption Error]";
         }
+    }
+
+    private void rekeyAndRetryMessage(String messageId, String ciphertext) {
+        String token = "Bearer " + Prefs.getToken();
+        RetrofitClient.getApiService().getKeyBundle(token, targetUserId).enqueue(new Callback<KeyBundleResponse>() {
+            @Override
+            public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    Log.w(TAG, "Rekey failed: key bundle response invalid for messageId=" + messageId);
+                    return;
+                }
+
+                try {
+                    byte[] newSecret = SignalManager.computeX3DHSharedSecret(
+                            Prefs.getIdentityPrivKey(),
+                            response.body().getIdentityKey(),
+                            response.body().getSignedPrekey(),
+                            response.body().getOneTimePrekey()
+                    );
+                    Prefs.saveSharedSecret(targetUserId, Base64.encodeToString(newSecret, Base64.NO_WRAP));
+
+                    // Retry decrypt and patch message in list
+                    String retried = decryptSafely(messageId, ciphertext, true);
+                    replaceMessageTextById(messageId, retried);
+
+                    Log.d(TAG, "Rekey retry completed for messageId=" + messageId);
+                } catch (Exception ex) {
+                    Log.e(TAG, "Rekey computation failed for messageId=" + messageId, ex);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<KeyBundleResponse> call, Throwable t) {
+                Log.e(TAG, "Rekey request failed for messageId=" + messageId, t);
+            }
+        });
     }
 
     private void handleNewMessage(MessageResponse res) {
@@ -243,7 +310,7 @@ public class ChatActivity extends AppCompatActivity {
                 res.setRead(true);
             }
 
-            String decryptedContent = decryptSafely(res.getCiphertext());
+            String decryptedContent = decryptSafely(res.getId(), res.getCiphertext());
             Message msg = new Message(res.getId(), decryptedContent, isMe, parseIsoDate(res.getCreatedAt()), res.isRead());
             messageList.add(msg);
             loadedMessageIds.add(res.getId());
@@ -275,7 +342,7 @@ public class ChatActivity extends AppCompatActivity {
                                 markAsRead(res.getId());
                                 res.setRead(true);
                             }
-                            String content = decryptSafely(res.getCiphertext());
+                            String content = decryptSafely(res.getId(), res.getCiphertext());
                             processedMessages.add(new Message(res.getId(), content, isMe, parseIsoDate(res.getCreatedAt()), res.isRead()));
                             loadedMessageIds.add(res.getId());
                         } else {
@@ -472,5 +539,31 @@ public class ChatActivity extends AppCompatActivity {
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
+    }
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
+    private void replaceMessageTextById(String messageId, String newText) {
+        if (messageId == null) return;
+        for (int i = 0; i < messageList.size(); i++) {
+            Message m = messageList.get(i);
+            if (messageId.equals(m.getId())) {
+                // Recreate message preserving flags/timestamp/read state
+                Message updated = new Message(
+                        m.getId(),
+                        newText,
+                        m.isSentByMe(),
+                        m.getTimestamp(),
+                        m.isRead()
+                );
+                messageList.set(i, updated);
+                adapter.updateMessages(messageList);
+                return;
+            }
+        }
     }
 }

@@ -16,6 +16,8 @@ import com.example.myapplication.util.ProfileUtils;
 import com.example.myapplication.util.SignalManager;
 import java.util.ArrayList;
 import java.util.List;
+import android.util.Log;
+import java.util.regex.Pattern;
 
 public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdapter.ViewHolder> {
 
@@ -83,14 +85,21 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
         String targetUserId = conversation.getTargetUserId();
         String secretB64 = (targetUserId != null) ? Prefs.getSharedSecret(targetUserId) : null;
 
-        if (secretB64 != null && lastMsg != null && !lastMsg.isEmpty() && 
-            !lastMsg.equals("No messages yet") && !lastMsg.equals("Tap to chat")) {
+        if (secretB64 != null && lastMsg != null && !lastMsg.isEmpty()
+                && !lastMsg.equals("No messages yet")
+                && !lastMsg.equals("Tap to chat")
+                && looksLikeCiphertext(lastMsg)) {
             try {
                 byte[] secret = Base64.decode(secretB64, Base64.NO_WRAP);
                 lastMsg = SignalManager.decrypt(lastMsg, secret);
             } catch (Exception e) {
-                // If decryption fails, it might be a new session or corrupted state
-                lastMsg = "[Encrypted Message]";
+                // Expected for mixed legacy/plaintext/non-matching-session entries.
+                // Keep UI stable and avoid alarming stacktraces.
+                Log.w(TAG, "Preview decrypt skipped for conversation contact="
+                        + conversation.getContactName()
+                        + ", targetUserId=" + conversation.getTargetUserId()
+                        + " (possibly legacy/plaintext/mismatched key): "
+                        + e.getClass().getSimpleName());
             }
         }
         holder.lastMessage.setText(lastMsg);
@@ -137,5 +146,15 @@ public class ConversationsAdapter extends RecyclerView.Adapter<ConversationsAdap
             lastMessage = itemView.findViewById(R.id.textViewLastMessage);
             time = itemView.findViewById(R.id.textViewTime);
         }
+    }
+    private static final String TAG = "ConversationsAdapter";
+    private static final Pattern BASE64_PATTERN = Pattern.compile("^[A-Za-z0-9+/=_-]+$");
+
+    private boolean looksLikeCiphertext(String value) {
+        if (value == null) return false;
+        String s = value.trim();
+        // Skip obvious plaintext placeholders / short text
+        if (s.length() < 40) return false;
+        return BASE64_PATTERN.matcher(s).matches();
     }
 }

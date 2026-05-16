@@ -42,8 +42,8 @@
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ChatActivity"
-            android:parentActivityName=".MainActivity"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize"
+            tools:ignore="MissingClass" />
         <activity
             android:name=".SettingsActivity"
             android:parentActivityName=".MainActivity" />

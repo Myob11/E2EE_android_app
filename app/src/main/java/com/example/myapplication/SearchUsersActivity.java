@@ -146,4 +146,11 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
         onBackPressed();
         return true;
     }
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
 }

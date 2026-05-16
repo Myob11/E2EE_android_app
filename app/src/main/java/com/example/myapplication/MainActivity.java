@@ -44,6 +44,8 @@ public class MainActivity extends AppCompatActivity implements
     private Map<String, String> friendToChatId = new HashMap<>();
     private boolean isSearching = false;
 
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -51,6 +53,8 @@ public class MainActivity extends AppCompatActivity implements
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle("Chats");
         }
@@ -140,16 +144,10 @@ public class MainActivity extends AppCompatActivity implements
                     friendNames.clear();
                     for (User user : friendsList) {
                         friendNames.put(user.getId(), user.getUsername());
-                        
-                        // Establish shared secret if we have their public key and don't have a secret yet
-                        if (user.getPublic_key() != null && Prefs.getSharedSecret(user.getId()) == null) {
-                            try {
-                                byte[] secret = SignalManager.computeSharedSecret(Prefs.getIdentityPrivKey(), user.getPublic_key());
-                                Prefs.saveSharedSecret(user.getId(), Base64.encodeToString(secret, Base64.NO_WRAP));
-                            } catch (Exception e) {
-                                Log.e(TAG, "Failed to compute secret for " + user.getUsername(), e);
-                            }
-                        }
+
+                        // Defer computing the shared secret until the chat is opened where we fetch the full key bundle
+                        // (ChatActivity.fetchBundleAndEncrypt uses computeX3DHSharedSecret). Computing a single ECDH
+                        // here would make secrets incompatible with X3DH-derived secrets.
                     }
                 }
                 fetchChats();
@@ -372,4 +370,14 @@ public class MainActivity extends AppCompatActivity implements
         }
         return super.onOptionsItemSelected(item);
     }
+
+    //visina status vrstice
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
+
 }
