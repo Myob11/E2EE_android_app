@@ -15,12 +15,12 @@
           <targets>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="PhysicalDevice" identifier="serial=RFCW80M3RBY" />
+                <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\grego\.android\avd\Resizable_Experimental.avd" />
               </handle>
             </Target>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\grego\.android\avd\Resizable_Experimental.avd" />
+                <DeviceId pluginId="PhysicalDevice" identifier="serial=RFCW80M3RBY" />
               </handle>
             </Target>
           </targets>

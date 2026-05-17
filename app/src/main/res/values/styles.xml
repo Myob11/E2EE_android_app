@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overlay used for AlertDialog theme so we can set a custom buttonStyle -->
+    <style name="ThemeOverlay.App.AlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="buttonStyle">@style/Widget.App.AlertDialogButton</item>
+    </style>
+
+    <!-- Button style used by the dialog overlay; uses theme-aware color -->
+    <style name="Widget.App.AlertDialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/dialog_button_text</item>
+    </style>
+</resources>

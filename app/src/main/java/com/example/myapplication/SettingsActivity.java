@@ -1,5 +1,7 @@
 package com.example.myapplication;
 
+import static androidx.core.content.ContextCompat.startActivity;
+
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -33,6 +35,9 @@ import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+import android.widget.Button;
+import androidx.core.content.ContextCompat;
+import androidx.appcompat.app.AlertDialog; // if not already imported
 
 
 public class SettingsActivity extends AppCompatActivity {
@@ -103,12 +108,13 @@ public class SettingsActivity extends AppCompatActivity {
 
         // Long press on avatar to show upload prompt
         imageViewAvatar.setOnLongClickListener(v -> {
-            new AlertDialog.Builder(this)
+            AlertDialog avatarDialog = new AlertDialog.Builder(this)
                     .setTitle("Profile Picture")
                     .setMessage("Do you want to upload a new profile picture?")
                     .setPositiveButton("Yes", (dialog, which) -> openGallery())
                     .setNegativeButton("No", null)
                     .show();
+            tintDialogButtons(avatarDialog);
             return true;
         });
 
@@ -130,7 +136,7 @@ public class SettingsActivity extends AppCompatActivity {
         EditText input = new EditText(this);
         input.setHint("Type DELETE to confirm");
 
-        new AlertDialog.Builder(this)
+        AlertDialog confirmDialog = new AlertDialog.Builder(this)
                 .setTitle("Delete Profile")
                 .setMessage("This will permanently delete your account and all associated data. Type DELETE (all caps) to confirm.")
                 .setView(input)
@@ -144,6 +150,17 @@ public class SettingsActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+        tintDialogButtons(confirmDialog);
+    }
+    private void tintDialogButtons(AlertDialog dialog) {
+        if (dialog == null) return;
+        int color = ContextCompat.getColor(this, R.color.dialog_button_text);
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+        if (positive != null) positive.setTextColor(color);
+        if (negative != null) negative.setTextColor(color);
+        if (neutral != null) neutral.setTextColor(color);
     }
 
     private void performAccountDeletion() {
@@ -162,7 +179,7 @@ public class SettingsActivity extends AppCompatActivity {
                 progress.dismiss();
                 if (response.isSuccessful()) {
                     // Show success and navigate to login
-                    new AlertDialog.Builder(SettingsActivity.this)
+                    AlertDialog deletedDialog = new AlertDialog.Builder(SettingsActivity.this)
                             .setTitle("Account Deleted")
                             .setMessage("Your account has been deleted successfully.")
                             .setPositiveButton("OK", (dialog, which) -> {
@@ -174,6 +191,7 @@ public class SettingsActivity extends AppCompatActivity {
                             })
                             .setCancelable(false)
                             .show();
+                    tintDialogButtons(deletedDialog);
                 } else {
                     String err = "Failed to delete account (" + response.code() + ")";
                     Toast.makeText(SettingsActivity.this, err, Toast.LENGTH_LONG).show();

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dialog button text in night mode should be light for visibility -->
+    <color name="dialog_button_text">#FFFFFFFF</color>
+
+    <!-- Optional: override other colors used by dialogs if needed -->
+    <!-- <color name="primary">#004BA0</color> -->
+</resources>
