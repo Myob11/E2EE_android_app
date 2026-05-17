@@ -40,7 +40,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String TAG = "SettingsActivityDebug";
     private static final int PICK_IMAGE_REQUEST = 1;
     private ImageView imageViewAvatar;
-    private RadioGroup radioGroupTheme;
+    private SwitchCompat switchTheme;
     private SwitchCompat switchOnlineIndicator;
     private SwitchCompat switchAutoDownload;
     private TextView textViewUsernameDisplay;
@@ -69,7 +69,27 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
-        radioGroupTheme = findViewById(R.id.radioGroupTheme);
+
+        switchTheme = findViewById(R.id.switchTheme);
+// Read saved preference and set switch state
+        boolean isDark = Prefs.isDarkMode();
+        switchTheme.setChecked(isDark);
+
+        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Prefs.saveThemeMode(isChecked);
+            AppCompatDelegate.setDefaultNightMode(
+                    isChecked ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+            );
+            applyStatusBar();
+        });
+        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Prefs.saveThemeMode(isChecked);
+            AppCompatDelegate.setDefaultNightMode(
+                    isChecked ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+            );
+            applyStatusBar();
+            recreate();  // Add this line
+        });
 
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
@@ -93,14 +113,6 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
 
-        radioGroupTheme.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.radioLight) {
-                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-            } else if (checkedId == R.id.radioDark) {
-                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-            }
-            applyStatusBar();
-        });
 
         buttonSwitchAccount.setOnClickListener(v -> {
             Prefs.clearSessionOnly();
