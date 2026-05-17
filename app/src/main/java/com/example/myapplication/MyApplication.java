@@ -16,8 +16,11 @@ public class MyApplication extends Application {
         super.onCreate();
         instance = this;
         Prefs.init(this);
-        
-        // Force Light Theme as default
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+
+// Apply saved theme preference
+        boolean isDark = Prefs.isDarkMode();
+        AppCompatDelegate.setDefaultNightMode(
+                isDark ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+        );
     }
 }

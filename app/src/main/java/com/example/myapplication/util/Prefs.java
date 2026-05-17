@@ -118,4 +118,12 @@ public class Prefs {
                 .remove(KEY_USERNAME)
                 .apply();
     }
+    public static void saveThemeMode(boolean darkMode) {
+        sharedPreferences.edit().putBoolean("dark_mode", darkMode).apply();
+    }
+
+    public static boolean isDarkMode() {
+        return sharedPreferences.getBoolean("dark_mode", false);
+    }
+
 }
