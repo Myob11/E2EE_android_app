@@ -65,20 +65,18 @@ public class ProfileUtils {
                 .load(url)
                 .circleCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .placeholder(R.mipmap.ic_launcher_round)
-                .error(R.mipmap.ic_launcher_round)
+                .placeholder(R.drawable.ic_default_profile)
+                .error(R.drawable.ic_default_profile)
                 .into(imageView);
     }
 
     private static void loadPlaceholder(Context context, String username, ImageView imageView) {
         if (!isValidContext(context)) return;
         
-        String fallback = "https://i.pravatar.cc/150?u=" + (username != null ? username : "default");
         Glide.with(context)
-                .load(fallback)
+                .load(R.drawable.ic_default_profile)
                 .circleCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .placeholder(R.mipmap.ic_launcher_round)
                 .into(imageView);
     }
 

@@ -367,7 +367,7 @@ Overview
 Important behavior
 - loadProfilePicture(context, username, imageView): checks username and context validity; if cached download URL exists it calls `loadImage`, otherwise requests a download URL from backend and caches it on success.
 - loadImage: uses Glide to load the image with circleCrop and disk caching.
-- loadPlaceholder: falls back to `https://i.pravatar.cc/150?u=<username>` when no server URL is available.
+- loadPlaceholder: falls back to `R.drawable.ic_default_profile` when no server URL is available.
 - isValidContext: defensive check to avoid Glide illegal state when activity is finishing/destroyed.
 
 -----------------------------
