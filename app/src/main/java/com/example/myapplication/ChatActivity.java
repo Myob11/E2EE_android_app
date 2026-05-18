@@ -24,7 +24,6 @@ import com.example.myapplication.util.Prefs;
 import com.example.myapplication.util.SignalManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import android.view.WindowManager;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import okhttp3.OkHttpClient;
@@ -191,9 +191,29 @@ public class ChatActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
+        getWindow().setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                        | WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+        );
+
+        View rootView = findViewById(android.R.id.content);
+        View inputBar = findViewById(R.id.layoutInput);
+        rootView.setOnApplyWindowInsetsListener((v, insets) -> {
+            int bottomInset = insets.getSystemWindowInsetBottom();
+
+            if (inputBar != null) {
+                inputBar.setPadding(
+                        inputBar.getPaddingLeft(),
+                        inputBar.getPaddingTop(),
+                        inputBar.getPaddingRight(),
+                        bottomInset
+                );
+            }
 
 
-
+            return v.onApplyWindowInsets(insets);
+        });
+        rootView.requestApplyInsets();
 
         isoFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 
