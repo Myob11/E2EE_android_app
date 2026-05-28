@@ -20,6 +20,7 @@ public class Prefs {
     private static final String KEY_REGISTRATION_ID = "registration_id";
 
     private static SharedPreferences sharedPreferences;
+    private static String currentUserId = null;
 
     public static void init(Context context) {
         try {
@@ -58,6 +59,7 @@ public class Prefs {
 
     public static void saveUserId(String userId) {
         sharedPreferences.edit().putString(KEY_USER_ID, userId).apply();
+        setCurrentUser(userId);
     }
 
     public static String getUserId() {
@@ -72,17 +74,20 @@ public class Prefs {
         return sharedPreferences.getString(KEY_USERNAME, null);
     }
 
-    // Signal Key Storage
+    // Signal Key Storage - Per-User
     public static void saveIdentityKeys(String pub, String priv) {
         sharedPreferences.edit()
-                .putString(KEY_IDENTITY_PUB, pub)
-                .putString(KEY_IDENTITY_PRIV, priv)
+                .putString(getUserKey(KEY_IDENTITY_PUB), pub)
+                .putString(getUserKey(KEY_IDENTITY_PRIV), priv)
                 .apply();
     }
 
-    public static String getIdentityPubKey() { return sharedPreferences.getString(KEY_IDENTITY_PUB, null); }
+    public static String getIdentityPubKey() { 
+        return sharedPreferences.getString(getUserKey(KEY_IDENTITY_PUB), null); 
+    }
+    
     public static String getIdentityPrivKey() { 
-        String key = sharedPreferences.getString(KEY_IDENTITY_PRIV, null);
+        String key = sharedPreferences.getString(getUserKey(KEY_IDENTITY_PRIV), null);
         if (key == null) {
             android.util.Log.e("Prefs", "WARNING: Identity private key is null. Keys may have been lost during encryption initialization failure.");
         }
@@ -91,14 +96,17 @@ public class Prefs {
 
     public static void saveSignedPrekey(String pub, String priv) {
         sharedPreferences.edit()
-                .putString(KEY_SIGNED_PREKEY_PUB, pub)
-                .putString(KEY_SIGNED_PREKEY_PRIV, priv)
+                .putString(getUserKey(KEY_SIGNED_PREKEY_PUB), pub)
+                .putString(getUserKey(KEY_SIGNED_PREKEY_PRIV), priv)
                 .apply();
     }
 
-    public static String getSignedPrekeyPub() { return sharedPreferences.getString(KEY_SIGNED_PREKEY_PUB, null); }
+    public static String getSignedPrekeyPub() {
+        return sharedPreferences.getString(getUserKey(KEY_SIGNED_PREKEY_PUB), null);
+    }
+
     public static String getSignedPrekeyPriv() {
-        String key = sharedPreferences.getString(KEY_SIGNED_PREKEY_PRIV, null);
+        String key = sharedPreferences.getString(getUserKey(KEY_SIGNED_PREKEY_PRIV), null);
         if (key == null) {
             android.util.Log.e("Prefs", "WARNING: Signed prekey private key is null. Keys may have been lost during encryption initialization failure.");
         }
@@ -106,19 +114,21 @@ public class Prefs {
     }
 
     public static void saveRegistrationId(int id) {
-        sharedPreferences.edit().putInt(KEY_REGISTRATION_ID, id).apply();
+        sharedPreferences.edit().putInt(getUserKey(KEY_REGISTRATION_ID), id).apply();
     }
 
     public static int getRegistrationId() {
-        return sharedPreferences.getInt(KEY_REGISTRATION_ID, 0);
+        return sharedPreferences.getInt(getUserKey(KEY_REGISTRATION_ID), 0);
     }
     
     public static void saveSharedSecret(String userId, String secret) {
-        sharedPreferences.edit().putString("shared_secret_" + userId, secret).apply();
+        String key = currentUserId != null ? currentUserId + "_shared_secret_" + userId : "shared_secret_" + userId;
+        sharedPreferences.edit().putString(key, secret).apply();
     }
     
     public static String getSharedSecret(String userId) {
-        return sharedPreferences.getString("shared_secret_" + userId, null);
+        String key = currentUserId != null ? currentUserId + "_shared_secret_" + userId : "shared_secret_" + userId;
+        return sharedPreferences.getString(key, null);
     }
 
     public static void clear() {
@@ -137,6 +147,7 @@ public class Prefs {
                 .remove(KEY_USER_ID)
                 .remove(KEY_USERNAME)
                 .apply();
+        clearCurrentUser();
     }
     public static void saveThemeMode(boolean darkMode) {
         sharedPreferences.edit().putBoolean("dark_mode", darkMode).apply();
@@ -144,6 +155,85 @@ public class Prefs {
 
     public static boolean isDarkMode() {
         return sharedPreferences.getBoolean("dark_mode", false);
+    }
+
+    /**
+     * Returns per-user namespaced key. When currentUserId is set, keys are stored per-user.
+     * Falls back to legacy key name if currentUserId is null (backward compatibility).
+     */
+    private static String getUserKey(String baseKey) {
+        if (currentUserId != null && !currentUserId.isEmpty()) {
+            return currentUserId + "_" + baseKey;
+        }
+        return baseKey;
+    }
+
+    /**
+     * Call this after login to set the current user context.
+     * All cryptographic keys will be stored per-user after this call.
+     * Also handles migration of legacy keys to per-user namespace.
+     */
+    public static void setCurrentUser(String userId) {
+        currentUserId = userId;
+        android.util.Log.d("Prefs", "Current user context set to: " + userId);
+
+        // Migrate legacy keys to per-user namespace if they exist
+        migrateLegacyKeysToPerUser();
+    }
+
+    /**
+     * Clear current user context (on logout).
+     */
+    public static void clearCurrentUser() {
+        currentUserId = null;
+        android.util.Log.d("Prefs", "Current user context cleared");
+    }
+
+    /**
+     * Migrates keys from legacy (non-namespaced) storage to per-user storage.
+     * This ensures compatibility when upgrading from non-per-user key storage.
+     */
+    private static void migrateLegacyKeysToPerUser() {
+        if (currentUserId == null || currentUserId.isEmpty()) {
+            return;
+        }
+
+        // Check if legacy keys exist and per-user keys don't
+        String legacyIdentityPriv = sharedPreferences.getString(KEY_IDENTITY_PRIV, null);
+        String legacySignedPrekeyPriv = sharedPreferences.getString(KEY_SIGNED_PREKEY_PRIV, null);
+        int legacyRegistrationId = sharedPreferences.getInt(KEY_REGISTRATION_ID, 0);
+
+        String perUserIdentityPriv = sharedPreferences.getString(currentUserId + "_" + KEY_IDENTITY_PRIV, null);
+
+        // Only migrate if legacy keys exist and per-user keys don't
+        if (legacyIdentityPriv != null && perUserIdentityPriv == null) {
+            android.util.Log.d("Prefs", "Migrating legacy keys to per-user namespace for: " + currentUserId);
+
+            // Migrate all cryptographic keys
+            String legacyIdentityPub = sharedPreferences.getString(KEY_IDENTITY_PUB, null);
+            String legacySignedPrekeyPub = sharedPreferences.getString(KEY_SIGNED_PREKEY_PUB, null);
+
+            SharedPreferences.Editor editor = sharedPreferences.edit();
+
+            if (legacyIdentityPub != null) {
+                editor.putString(currentUserId + "_" + KEY_IDENTITY_PUB, legacyIdentityPub);
+            }
+            if (legacyIdentityPriv != null) {
+                editor.putString(currentUserId + "_" + KEY_IDENTITY_PRIV, legacyIdentityPriv);
+            }
+            if (legacySignedPrekeyPub != null) {
+                editor.putString(currentUserId + "_" + KEY_SIGNED_PREKEY_PUB, legacySignedPrekeyPub);
+            }
+            if (legacySignedPrekeyPriv != null) {
+                editor.putString(currentUserId + "_" + KEY_SIGNED_PREKEY_PRIV, legacySignedPrekeyPriv);
+            }
+            if (legacyRegistrationId > 0) {
+                editor.putInt(currentUserId + "_" + KEY_REGISTRATION_ID, legacyRegistrationId);
+            }
+
+            editor.apply();
+            android.util.Log.d("Prefs", "Legacy key migration completed for: " + currentUserId);
+        }
     }
 
 }
