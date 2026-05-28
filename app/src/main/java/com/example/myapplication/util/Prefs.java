@@ -35,8 +35,16 @@ public class Prefs {
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
         } catch (GeneralSecurityException | IOException e) {
-            e.printStackTrace();
-            sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            // CRITICAL: Do NOT fall back to unencrypted storage
+            // This would silently lose private key encryption and expose keys to compromise
+            android.util.Log.e("Prefs", "CRITICAL: Failed to initialize EncryptedSharedPreferences. " +
+                    "This indicates either a compromised device, corrupted storage, or corrupted AndroidKeystore.", e);
+            throw new RuntimeException(
+                    "Failed to initialize secure storage. Cannot continue. " +
+                    "Your device may be compromised or device storage may be corrupted. " +
+                    "Please uninstall and reinstall the app or perform a factory reset.",
+                    e
+            );
         }
     }
 
@@ -73,7 +81,13 @@ public class Prefs {
     }
 
     public static String getIdentityPubKey() { return sharedPreferences.getString(KEY_IDENTITY_PUB, null); }
-    public static String getIdentityPrivKey() { return sharedPreferences.getString(KEY_IDENTITY_PRIV, null); }
+    public static String getIdentityPrivKey() { 
+        String key = sharedPreferences.getString(KEY_IDENTITY_PRIV, null);
+        if (key == null) {
+            android.util.Log.e("Prefs", "WARNING: Identity private key is null. Keys may have been lost during encryption initialization failure.");
+        }
+        return key;
+    }
 
     public static void saveSignedPrekey(String pub, String priv) {
         sharedPreferences.edit()
@@ -83,7 +97,13 @@ public class Prefs {
     }
 
     public static String getSignedPrekeyPub() { return sharedPreferences.getString(KEY_SIGNED_PREKEY_PUB, null); }
-    public static String getSignedPrekeyPriv() { return sharedPreferences.getString(KEY_SIGNED_PREKEY_PRIV, null); }
+    public static String getSignedPrekeyPriv() {
+        String key = sharedPreferences.getString(KEY_SIGNED_PREKEY_PRIV, null);
+        if (key == null) {
+            android.util.Log.e("Prefs", "WARNING: Signed prekey private key is null. Keys may have been lost during encryption initialization failure.");
+        }
+        return key;
+    }
 
     public static void saveRegistrationId(int id) {
         sharedPreferences.edit().putInt(KEY_REGISTRATION_ID, id).apply();
