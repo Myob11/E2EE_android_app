@@ -35,6 +35,12 @@ public class Prefs {
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             );
+
+            // Restore current user context after process death so per-user namespacing remains active.
+            currentUserId = sharedPreferences.getString(KEY_USER_ID, null);
+            if (currentUserId != null && !currentUserId.isEmpty()) {
+                migrateLegacyKeysToPerUser();
+            }
         } catch (GeneralSecurityException | IOException e) {
             // CRITICAL: Do NOT fall back to unencrypted storage
             // This would silently lose private key encryption and expose keys to compromise
@@ -79,7 +85,7 @@ public class Prefs {
         sharedPreferences.edit()
                 .putString(getUserKey(KEY_IDENTITY_PUB), pub)
                 .putString(getUserKey(KEY_IDENTITY_PRIV), priv)
-                .apply();
+                .commit();  // CRITICAL: Synchronous write - ensures keys survive force quit
     }
 
     public static String getIdentityPubKey() { 
@@ -98,7 +104,7 @@ public class Prefs {
         sharedPreferences.edit()
                 .putString(getUserKey(KEY_SIGNED_PREKEY_PUB), pub)
                 .putString(getUserKey(KEY_SIGNED_PREKEY_PRIV), priv)
-                .apply();
+                .commit();  // CRITICAL: Synchronous write - ensures keys survive force quit
     }
 
     public static String getSignedPrekeyPub() {
@@ -114,7 +120,7 @@ public class Prefs {
     }
 
     public static void saveRegistrationId(int id) {
-        sharedPreferences.edit().putInt(getUserKey(KEY_REGISTRATION_ID), id).apply();
+        sharedPreferences.edit().putInt(getUserKey(KEY_REGISTRATION_ID), id).commit();  // CRITICAL: Synchronous write
     }
 
     public static int getRegistrationId() {
@@ -123,16 +129,24 @@ public class Prefs {
     
     public static void saveSharedSecret(String userId, String secret) {
         String key = currentUserId != null ? currentUserId + "_shared_secret_" + userId : "shared_secret_" + userId;
-        sharedPreferences.edit().putString(key, secret).apply();
+        sharedPreferences.edit().putString(key, secret).commit();  // CRITICAL: Synchronous write
     }
     
     public static String getSharedSecret(String userId) {
+        if (currentUserId != null) {
+            return sharedPreferences.getString(currentUserId + "_shared_secret_" + userId, null);
+        }
+        return sharedPreferences.getString("shared_secret_" + userId, null);
+    }
+
+    public static void removeSharedSecret(String userId) {
         String key = currentUserId != null ? currentUserId + "_shared_secret_" + userId : "shared_secret_" + userId;
-        return sharedPreferences.getString(key, null);
+        sharedPreferences.edit().remove(key).commit();
     }
 
     public static void clear() {
-        sharedPreferences.edit().clear().apply();
+        sharedPreferences.edit().clear().commit();
+        clearCurrentUser();
     }
 
     /**
@@ -231,7 +245,7 @@ public class Prefs {
                 editor.putInt(currentUserId + "_" + KEY_REGISTRATION_ID, legacyRegistrationId);
             }
 
-            editor.apply();
+            editor.commit();  // CRITICAL: Synchronous write for key migration
             android.util.Log.d("Prefs", "Legacy key migration completed for: " + currentUserId);
         }
     }
