@@ -100,8 +100,8 @@ public class LoginActivity extends AppCompatActivity {
                         goToMain();
                     }
                 } else {
-                    Prefs.clear();
-                    setContentView(R.layout.activity_login); 
+                    Prefs.clearSessionOnly();
+                    setContentView(R.layout.activity_login);
                 }
             }
 
