@@ -191,6 +191,12 @@ public class ChatActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
+        // Ensure currentUserId is set for proper encryption/decryption with correct namespace
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
+
         getWindow().setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
                         | WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN

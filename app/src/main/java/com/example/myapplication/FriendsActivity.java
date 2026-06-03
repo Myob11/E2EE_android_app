@@ -33,9 +33,11 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_friends);
 
-
-
-
+        // Ensure currentUserId is set for proper namespacing of user-scoped preferences
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
 
         Log.d(TAG, "onCreate: Initializing FriendsActivity");
 

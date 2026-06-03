@@ -33,6 +33,12 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search_users);
 
+        // Ensure currentUserId is set for proper namespacing of user-scoped preferences
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
+
         Toolbar toolbar = findViewById(R.id.searchToolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {

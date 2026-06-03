@@ -2,7 +2,6 @@ package com.example.myapplication;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.util.Base64;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
@@ -28,6 +27,10 @@ public class RegisterActivity extends AppCompatActivity {
     private TextInputEditText editTextUsername, editTextPassword;
     private Button buttonRegister;
     private TextView textViewLogin;
+    private SignalManager.KeyPairStrings pendingIdentityKeys;
+    private int pendingRegistrationId = 0;
+    private String pendingUsername;
+    private String pendingPassword;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,16 +52,16 @@ public class RegisterActivity extends AppCompatActivity {
             }
 
             try {
-                // Generate Identity Key
-                SignalManager.KeyPairStrings identityKeys = SignalManager.generateKeyPair();
-                Prefs.saveIdentityKeys(identityKeys.publicKey, identityKeys.privateKey);
-                
-                // Generate Registration ID
-                int registrationId = new SecureRandom().nextInt(10000) + 1000;
-                Prefs.saveRegistrationId(registrationId);
+                // Generate account-bound Identity Key
+                pendingIdentityKeys = SignalManager.generateAccountBoundKeyPair(username, password);
+                pendingUsername = username;
+                pendingPassword = password;
 
-                AuthRequest request = new AuthRequest(username, password, identityKeys.publicKey);
-                
+                // Generate Registration ID
+                pendingRegistrationId = new SecureRandom().nextInt(10000) + 1000;
+
+                AuthRequest request = new AuthRequest(username, password, pendingIdentityKeys.publicKey);
+
                 buttonRegister.setEnabled(false);
                 RetrofitClient.getApiService().register(request).enqueue(new Callback<AuthResponse>() {
                     @Override
@@ -89,8 +92,12 @@ public class RegisterActivity extends AppCompatActivity {
                     }
                 });
             } catch (Exception e) {
-                Log.e("RegisterActivity", "Key generation failed", e);
-                Toast.makeText(this, "Failed to initialize secure keys", Toast.LENGTH_LONG).show();
+                Log.e("RegisterActivity", "Key generation failed: " + e.getMessage(), e);
+                String errorMsg = "Failed to initialize secure keys: " + e.getClass().getSimpleName();
+                if (e.getMessage() != null) {
+                    errorMsg += " - " + e.getMessage();
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show();
             }
         });
 
@@ -103,6 +110,7 @@ public class RegisterActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<AuthResponse> call, Response<AuthResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
+                    Prefs.setCurrentUser(response.body().getId());
                     String token = response.body().getAccess_token();
                     Prefs.saveToken(token);
                     fetchUserProfile(token);
@@ -125,9 +133,15 @@ public class RegisterActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<User> call, Response<User> response) {
                 if (response.isSuccessful() && response.body() != null) {
+                    Prefs.setCurrentUser(response.body().getId());
                     Prefs.saveUserId(response.body().getId());
                     Prefs.saveUsername(response.body().getUsername());
-                    
+                    if (pendingRegistrationId > 0) {
+                        Prefs.saveRegistrationId(pendingRegistrationId);
+                    }
+                    if (pendingIdentityKeys != null) {
+                        Prefs.saveIdentityKeys(pendingIdentityKeys.publicKey, pendingIdentityKeys.privateKey);
+                    }
                     uploadKeyBundle(token, response.body().getId());
                 } else {
                     finish();
@@ -150,12 +164,29 @@ public class RegisterActivity extends AppCompatActivity {
             // Generate One-time Prekeys
             List<String> otps = SignalManager.generateOneTimePrekeys(10);
             
+            // Encrypt identity private key for secure backup/restore across devices
+            String encryptedPrivateKey = null;
+            if (pendingIdentityKeys != null && pendingUsername != null && pendingPassword != null) {
+                try {
+                    encryptedPrivateKey = SignalManager.encryptIdentityPrivateKey(
+                            pendingIdentityKeys.privateKey,
+                            pendingUsername,
+                            pendingPassword
+                    );
+                    Log.d("RegisterActivity", "Successfully encrypted identity private key for backup");
+                } catch (Exception e) {
+                    Log.w("RegisterActivity", "Failed to encrypt identity private key for backup: " + e.getMessage());
+                    // Continue anyway - encrypted backup is optional
+                }
+            }
+
             KeyBundleRequest bundleRequest = new KeyBundleRequest(
                     Prefs.getIdentityPubKey(),
                     signedPrekey.publicKey,
                     otps,
                     Prefs.getRegistrationId(),
-                    "android-" + android.os.Build.MODEL
+                    "android-" + android.os.Build.MODEL,
+                    encryptedPrivateKey
             );
 
             RetrofitClient.getApiService().uploadKeys("Bearer " + token, userId, bundleRequest).enqueue(new Callback<Void>() {

@@ -142,6 +142,11 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onResume() {
         super.onResume();
+        // Ensure currentUserId is set for proper namespacing of shared secrets and keys
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
         if (!isSearching) {
             loadData();
             startAutoRefresh();

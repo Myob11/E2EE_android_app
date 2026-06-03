@@ -7,6 +7,7 @@ public class KeyBundleResponse {
     private String one_time_prekey;
     private int registration_id;
     private String device_id;
+    private String encrypted_identity_private_key; // For secure restore on new device
 
     public String getUserId() { return user_id; }
     public String getIdentityKey() { return identity_key; }
@@ -14,4 +15,5 @@ public class KeyBundleResponse {
     public String getOneTimePrekey() { return one_time_prekey; }
     public int getRegistrationId() { return registration_id; }
     public String getDeviceId() { return device_id; }
+    public String getEncryptedIdentityPrivateKey() { return encrypted_identity_private_key; }
 }
