@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity implements
     private Runnable refreshRunnable;
     private static final int REFRESH_INTERVAL = 5000; // 5 seconds
 
+    // Sets up the conversations screen, search box, and refresh behavior.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -107,6 +108,7 @@ public class MainActivity extends AppCompatActivity implements
         setupAutoRefresh();
     }
 
+    // Schedules periodic reloads so chats stay up to date.
     private void setupAutoRefresh() {
         refreshRunnable = new Runnable() {
             @Override
@@ -119,6 +121,7 @@ public class MainActivity extends AppCompatActivity implements
         };
     }
 
+    // Filters friends by username and shows matching chat placeholders.
     private void performSearch(String query) {
         List<User> sortedFriends = new ArrayList<>(friendsList);
         Collections.sort(sortedFriends, (u1, u2) -> u1.getUsername().compareToIgnoreCase(u2.getUsername()));
@@ -140,6 +143,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
+    // Refreshes data and resumes auto-refresh when the screen becomes active.
     protected void onResume() {
         super.onResume();
         // Ensure currentUserId is set for proper namespacing of shared secrets and keys
@@ -153,6 +157,7 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
+    // Starts the repeating refresh loop.
     private void startAutoRefresh() {
         if (refreshRunnable != null) {
             refreshHandler.removeCallbacks(refreshRunnable);
@@ -160,6 +165,7 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
+    // Stops the repeating refresh loop.
     private void stopAutoRefresh() {
         if (refreshRunnable != null) {
             refreshHandler.removeCallbacks(refreshRunnable);
@@ -167,17 +173,20 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
+    // Pauses background refresh when the screen is not visible.
     protected void onPause() {
         super.onPause();
         stopAutoRefresh();
     }
 
     @Override
+    // Cleans up refresh callbacks before the activity is destroyed.
     protected void onDestroy() {
         super.onDestroy();
         stopAutoRefresh();
     }
 
+    // Loads friends, computes missing shared secrets, and then loads chats.
     private void loadData() {
         String rawToken = Prefs.getToken();
         String userId = Prefs.getUserId();
@@ -214,6 +223,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Downloads chats and prepares conversation rows for the list.
     private void fetchChats() {
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
@@ -268,6 +278,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Loads the latest ciphertext so each chat row can show a preview.
     private void fetchLastMessage(Conversation conv) {
         String token = "Bearer " + Prefs.getToken();
         RetrofitClient.getApiService().getMessages(token, conv.getChatId(), 1, null).enqueue(new Callback<List<MessageResponse>>() {
@@ -286,6 +297,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Sorts conversations by newest message and refreshes the adapter.
     private void sortAndDisplayChats() {
         Collections.sort(chatConversations, (c1, c2) -> {
             String t1 = c1.getLastMessageTime();
@@ -302,6 +314,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
+    // Opens the selected chat screen.
     public void onConversationClick(Conversation conversation) {
         Intent intent = new Intent(this, ChatActivity.class);
         intent.putExtra("chatId", conversation.getChatId());
@@ -311,6 +324,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
+    // Shows a confirmation dialog before deleting a chat.
     public void onConversationLongClick(Conversation conversation) {
         if (conversation == null || conversation.getChatId() == null || conversation.getChatId().isEmpty()) {
             return;
@@ -324,6 +338,7 @@ public class MainActivity extends AppCompatActivity implements
                 .show();
     }
 
+    // Deletes a chat using the backend and falls back to alternate routes if needed.
     private void deleteChat(Conversation conversation) {
         String token = "Bearer " + Prefs.getToken();
         String chatId = conversation.getChatId();
@@ -351,6 +366,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Tries the POST-based delete endpoint used by some server deployments.
     private void tryDeleteChatViaPostAction(String token, String chatId, Conversation conversation) {
         RetrofitClient.getApiService().deleteChatPostAction(token, chatId).enqueue(new Callback<Map<String, Object>>() {
             @Override
@@ -374,6 +390,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Tries the final POST-based delete fallback.
     private void tryDeleteChatViaPostRemove(String token, String chatId, Conversation conversation) {
         RetrofitClient.getApiService().deleteChatPostRemove(token, chatId).enqueue(new Callback<Map<String, Object>>() {
             @Override
@@ -392,6 +409,7 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
+    // Removes the deleted chat from local lists and refreshes the UI.
     private void handleChatDeleted(Conversation conversation, String chatId) {
         chatConversations.removeIf(c -> chatId.equals(c.getChatId()));
         if (conversation.getTargetUserId() != null) {
@@ -407,12 +425,14 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
+    // Inflates the top-right menu in the toolbar.
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
         return true;
     }
 
     @Override
+    // Handles toolbar actions such as opening Settings.
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_settings) {

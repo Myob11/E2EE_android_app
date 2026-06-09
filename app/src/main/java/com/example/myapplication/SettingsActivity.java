@@ -45,6 +45,7 @@ public class SettingsActivity extends AppCompatActivity {
     private Button buttonSwitchAccount;
     private Button buttonDeleteProfile;
 
+    // Applies the system bar styling used by the settings screen.
     private void applyStatusBar() {
         Window window = getWindow();
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
@@ -52,6 +53,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Sets up theme controls, profile picture actions, and account options.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -124,6 +126,7 @@ public class SettingsActivity extends AppCompatActivity {
         buttonDeleteProfile.setOnClickListener(v -> showDeleteConfirmationDialog());
     }
 
+    // Asks the user to type DELETE before deleting the account.
     private void showDeleteConfirmationDialog() {
         EditText input = new EditText(this);
         input.setHint("Type DELETE to confirm");
@@ -145,6 +148,7 @@ public class SettingsActivity extends AppCompatActivity {
         tintDialogButtons(confirmDialog);
     }
 
+    // Calls the backend to delete the current account.
     private void performAccountDeletion() {
         AlertDialog progress = new AlertDialog.Builder(this)
                 .setTitle("Deleting account")
@@ -185,6 +189,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    // Matches dialog button colors to the app theme.
     private void tintDialogButtons(AlertDialog dialog) {
         if (dialog == null) return;
         int color = ContextCompat.getColor(this, R.color.dialog_button_text);
@@ -194,6 +199,7 @@ public class SettingsActivity extends AppCompatActivity {
         if (negative != null) negative.setTextColor(color);
     }
 
+    // Opens the image picker so the user can choose a profile picture.
     private void openGallery() {
         Intent intent = new Intent();
         intent.setType("image/*");
@@ -202,6 +208,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Handles the selected image and starts the upload flow.
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -209,6 +216,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    // Requests an upload URL and uploads the chosen profile image.
     private void uploadProfilePicture(final Uri uri) {
         String username = Prefs.getUsername();
         if (username == null) return;
@@ -237,6 +245,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    // Sends the image bytes to the pre-signed upload URL.
     private void performActualUpload(final String uploadUrl, final Uri uri, final String contentType) {
         try {
             InputStream inputStream = getContentResolver().openInputStream(uri);
@@ -259,6 +268,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    // Notifies the backend that the upload finished successfully.
     private void markComplete(int size) {
         final String username = Prefs.getUsername();
         String token = "Bearer " + Prefs.getToken();
@@ -280,6 +290,7 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
+    // Reads an InputStream into a byte array for upload.
     public byte[] getBytes(InputStream inputStream) throws Exception {
         ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
         byte[] buffer = new byte[1024];
@@ -291,6 +302,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Handles the toolbar back button.
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;

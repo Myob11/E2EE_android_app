@@ -84,6 +84,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
 
+    // Resolves which user id should be used for this message's shared secret.
     private String resolvePeerUserId(String senderId) {
         String myUserId = Prefs.getUserId();
         if (senderId == null) return targetUserId;
@@ -91,12 +92,14 @@ public class ChatActivity extends AppCompatActivity {
         return senderId;
     }
 
+    // Shortens long crypto strings for safer debug logging.
     private String truncateKey(String value) {
         if (value == null) return "null";
         if (value.length() <= 16) return value;
         return value.substring(0, 8) + "..." + value.substring(value.length() - 8);
     }
 
+    // Derives the peer shared secret and stores it for later encryption/decryption.
     private void deriveAndCacheSharedSecret(String peerUserId, String peerPublicKey, SharedSecretCallback onReady, Runnable onFailure) {
         try {
             String myIdentityPriv = Prefs.getIdentityPrivKey();
@@ -115,6 +118,7 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // Fetches the peer's public key and starts shared-secret derivation.
     private void fetchPeerIdentityAndCacheSecret(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
         String token = Prefs.getToken();
         if (token == null) {
@@ -145,6 +149,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Falls back to the peer key bundle if the direct public-key endpoint fails.
     private void fetchPeerBundleAndCacheSecret(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
         String token = Prefs.getToken();
         if (token == null) {
@@ -171,6 +176,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Reuses a cached shared secret or derives a new one if needed.
     private void ensureSharedSecretForPeer(String peerUserId, SharedSecretCallback onReady, Runnable onFailure) {
         if (peerUserId == null) {
             if (onFailure != null) onFailure.run();
@@ -187,6 +193,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override
+    // Builds the chat UI, loads messages, and starts realtime delivery.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
@@ -298,6 +305,7 @@ public class ChatActivity extends AppCompatActivity {
         };
     }
 
+    // Checks that the secret exists before encrypting a new outgoing message.
     private void prepareAndSendMessage(String text) {
         if (targetUserId == null) {
             Toast.makeText(this, "Missing chat participant", Toast.LENGTH_SHORT).show();
@@ -319,6 +327,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Encrypts the plaintext and sends it to the backend.
     private void encryptAndSendMessage(String plaintext, byte[] secret) {
         try {
             String ciphertext = SignalManager.encrypt(plaintext, secret);
@@ -332,6 +341,7 @@ public class ChatActivity extends AppCompatActivity {
             Toast.makeText(this, "Failed to encrypt message", Toast.LENGTH_SHORT).show();
         }
     }
+    // Decrypts an incoming ciphertext with the cached peer secret.
     private String decryptSafely(String peerUserId, String ciphertext) {
         String secretB64 = Prefs.getSharedSecret(peerUserId);
         if (secretB64 == null) return "[Encrypted Message]";
@@ -351,6 +361,7 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // Inserts a new incoming message into the list and marks it read if needed.
     private void handleNewMessage(MessageResponse res) {
         if (res == null || res.getId() == null) {
             return;
@@ -384,6 +395,7 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // Loads message history and decrypts each message for display.
     private void fetchMessages(String before, boolean isInitialLoad) {
         isLoading = true;
         String token = "Bearer " + Prefs.getToken();
@@ -436,6 +448,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Sends the encrypted text and adds the local sent message to the UI.
     private void sendCiphertext(String ciphertext, String originalPlaintext) {
         String token = "Bearer " + Prefs.getToken();
         MessageRequest request = new MessageRequest(chatId, Prefs.getUserId(), ciphertext, "text");
@@ -459,6 +472,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Creates a chat on the backend before sending the first encrypted message.
     private void createChatAndSendCiphertext(String ciphertext, String originalPlaintext) {
         String token = "Bearer " + Prefs.getToken();
         String currentUserId = Prefs.getUserId();
@@ -487,6 +501,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Tells the backend that an incoming message was read.
     private void markAsRead(String messageId) {
         String token = "Bearer " + Prefs.getToken();
         RetrofitClient.getApiService().markAsRead(token, messageId).enqueue(new Callback<Map<String, Object>>() {
@@ -497,6 +512,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Updates the local read flag for a message already in the list.
     private void updateExistingMessageReadStatus(String id, boolean isRead) {
         for (Message m : messageList) {
             if (m.getId() != null && m.getId().equals(id)) {
@@ -506,6 +522,7 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // Opens the realtime WebSocket connection for new messages.
     private void startWebSocket() {
         if (chatId == null || isWebSocketConnected || isWebSocketConnecting) return;
         
@@ -559,6 +576,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Shows or hides the connection status text.
     private void updateStatusUI(String message, boolean visible) {
         runOnUiThread(() -> {
             if (textViewStatus != null) {
@@ -568,6 +586,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Converts the backend timestamp into epoch milliseconds.
     private long parseIsoDate(String isoDate) {
         try {
             if (isoDate == null) return System.currentTimeMillis();
@@ -579,6 +598,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override
+    // Restarts polling and WebSocket connection when the chat returns to the foreground.
     protected void onResume() {
         super.onResume();
         pollHandler.postDelayed(pollRunnable, POLL_INTERVAL);
@@ -588,6 +608,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override
+    // Stops polling and closes the socket when the chat is paused.
     protected void onPause() {
         super.onPause();
         pollHandler.removeCallbacks(pollRunnable);

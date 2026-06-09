@@ -28,6 +28,7 @@ public class LoginActivity extends AppCompatActivity {
     private Button buttonLogin;
     private TextView textViewRegister;
 
+    // Handles auto-login, form setup, and navigation into registration.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -65,6 +66,7 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
+    // Sends the login request and stores the access token on success.
     private void login(String username, String password) {
         AuthRequest request = new AuthRequest(username, password);
         RetrofitClient.getApiService().login(request).enqueue(new Callback<AuthResponse>() {
@@ -86,6 +88,7 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
+     // Loads the account profile and decides whether to restore or create keys.
      private void fetchUserProfile(String token, String username, String password) {
          RetrofitClient.getApiService().getMe("Bearer " + token).enqueue(new Callback<User>() {
              @Override
@@ -121,7 +124,8 @@ public class LoginActivity extends AppCompatActivity {
          });
      }
 
-     private void fetchEncryptedKeysAndInitialize(String token, String userId, String username, String password) {
+      // Restores the identity private key from backup and refreshes device keys.
+      private void fetchEncryptedKeysAndInitialize(String token, String userId, String username, String password) {
          RetrofitClient.getApiService().getKeyBundle("Bearer " + token, userId).enqueue(new Callback<KeyBundleResponse>() {
              @Override
              public void onResponse(Call<KeyBundleResponse> call, Response<KeyBundleResponse> response) {
@@ -161,6 +165,7 @@ public class LoginActivity extends AppCompatActivity {
           });
       }
 
+     // Creates fresh device-specific keys after a successful restore.
      private void initializeNewDeviceKeysAndUpload(String token, String userId) {
          try {
              // Generate new device-specific keys (signed prekey and OTPs)
@@ -200,7 +205,8 @@ public class LoginActivity extends AppCompatActivity {
          }
      }
 
-     private void initializeKeysAndGoToMain(String token, String userId, String username, String password) {
+      // Generates a new account-bound identity key pair and uploads the bundle.
+      private void initializeKeysAndGoToMain(String token, String userId, String username, String password) {
          try {
              // Generate account-bound Identity Keys
              SignalManager.KeyPairStrings identityKeys = SignalManager.generateAccountBoundKeyPair(
@@ -260,6 +266,7 @@ public class LoginActivity extends AppCompatActivity {
          }
      }
 
+    // Opens the main screen after login/key setup finishes.
     private void goToMain() {
         startActivity(new Intent(this, MainActivity.class));
         finish();

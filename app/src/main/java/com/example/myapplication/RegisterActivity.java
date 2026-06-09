@@ -32,6 +32,7 @@ public class RegisterActivity extends AppCompatActivity {
     private String pendingUsername;
     private String pendingPassword;
 
+    // Sets up the registration form and starts the account creation flow.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -104,6 +105,7 @@ public class RegisterActivity extends AppCompatActivity {
         textViewLogin.setOnClickListener(v -> finish());
     }
 
+    // Logs in immediately after a successful registration.
     private void loginAfterRegister(String username, String password) {
         AuthRequest request = new AuthRequest(username, password);
         RetrofitClient.getApiService().login(request).enqueue(new Callback<AuthResponse>() {
@@ -128,6 +130,7 @@ public class RegisterActivity extends AppCompatActivity {
         });
     }
 
+    // Saves the new user profile and uploads the generated key bundle.
     private void fetchUserProfile(String token) {
         RetrofitClient.getApiService().getMe("Bearer " + token).enqueue(new Callback<User>() {
             @Override
@@ -155,6 +158,7 @@ public class RegisterActivity extends AppCompatActivity {
         });
     }
 
+    // Builds and uploads the account key bundle to the backend.
     private void uploadKeyBundle(String token, String userId) {
         try {
             // Generate Signed Prekey

@@ -28,6 +28,7 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     private FriendsAdapter adapter;
     private List<User> friendsList = new ArrayList<>();
 
+    // Sets up the friends screen and loads the current friend list.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -56,6 +57,7 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
         fetchFriends();
     }
 
+    // Requests friends from the backend and refreshes the list.
     private void fetchFriends() {
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
@@ -85,12 +87,14 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     }
 
     @Override
+    // Adds the toolbar menu for finding new friends.
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.friends_menu, menu);
         return true;
     }
 
     @Override
+    // Handles toolbar actions such as opening the search screen.
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.action_find_new) {
             Log.d(TAG, "Menu action: Find New");
@@ -101,12 +105,14 @@ public class FriendsActivity extends AppCompatActivity implements FriendsAdapter
     }
 
     @Override
+    // Returns to the previous screen from the toolbar back button.
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
     }
 
     @Override
+    // Opens a chat with the selected friend.
     public void onFriendClick(User friend) {
         Log.d(TAG, "onFriendClick: Opening chat with " + friend.getUsername() + ", userId=" + friend.getId());
         Intent intent = new Intent(this, ChatActivity.class);

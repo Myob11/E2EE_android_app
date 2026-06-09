@@ -9,21 +9,51 @@ Notes about this document
 - This file summarizes every Java source file under `app/src/main/java` in this project.
 - For each class I provide: a short overview, then method-by-method explanations. For larger methods I explain the purpose of important code blocks line-by-line.
 - I focused on explaining behavior, data flow (network, storage, crypto), and any non-obvious decisions (fallbacks, error handling, caching).
-- The crypto notes below reflect the current code base, including account-bound identity keys, encrypted private-key backup, shared-secret caching, and the AES-GCM message layer.
 
-Encryption and key management overview
-- Identity keys: the app uses X25519 identity key pairs. In the current code, the identity pair is generated with `SignalManager.generateAccountBoundKeyPair(username, password)`, which makes the identity key deterministic for the same account credentials.
-- How the deterministic seed is made: `SignalManager.deriveAccountSeed()` normalizes the username, uses the password as input, and runs PBKDF2WithHmacSHA256 with a username-based salt (`"com.example.myapplication.identity:" + username`) and 120,000 iterations.
-- What gets uploaded to the server: registration and key upload send the identity public key, signed prekey, one-time prekeys, registration id, device id, and optionally an encrypted copy of the identity private key.
-- Private-key backup: the identity private key can be encrypted with a password-derived AES key using AES/GCM and stored in the `encrypted_identity_private_key` field. This lets a user restore the same account identity on another device.
-- Shared secret for chats: for each peer, the app derives a shared secret with X25519 KeyAgreement between the local identity private key and the peer’s public key. That secret is saved in `Prefs` as Base64 under a peer-specific key.
-- Message encryption: actual chat messages are encrypted with AES/GCM. The AES key is derived from the shared secret using an HKDF-like HMAC-SHA256 step with a fixed info string. The random IV is prepended to the ciphertext and the result is Base64-encoded.
-- Which keys are used where:
-  - `identity private key` + `peer public key` -> shared secret
-  - `shared secret` -> message AES key
-  - `signed prekey` and `one-time prekeys` -> server-side key bundle / secure setup material, not the per-message encryption key
-  - `registration id` and `device id` -> metadata for backend/device tracking
-- Compatibility note: decryption first tries the current HKDF-derived AES key and then falls back to a legacy key-derivation path so older stored messages can still be read.
+Actual encryption workflow used by the app
+
+1) Registration and local identity setup
+- The user enters a username and password in `RegisterActivity`.
+- The app generates an account-bound X25519 identity key pair with `SignalManager.generateAccountBoundKeyPair(username, password)`.
+- That private key is saved locally in `Prefs` together with the public key.
+- The app sends the registration request to the backend with the identity public key included.
+- After registration succeeds, the app logs in, fetches the user profile, and uploads the key bundle to the backend.
+
+2) What gets prepared for secure messaging
+- The app generates a local registration id and stores it in `Prefs`.
+- The app generates a fresh signed prekey pair and stores it locally.
+- The app generates 10 one-time prekeys and includes them in the uploaded key bundle.
+- The app also encrypts the identity private key for backup with `SignalManager.encryptIdentityPrivateKey(...)` so the same account can be restored later on another device.
+
+3) Starting a chat with another user
+- When the chat screen opens, `ChatActivity` checks whether a shared secret for that peer already exists in `Prefs`.
+- If it does not exist, the app fetches the peer’s public key from the backend.
+- The app then derives a shared secret with `SignalManager.computeSharedSecret(...)` using:
+  - your local identity private key
+  - the other user’s public key
+- The shared secret is Base64-encoded and cached in `Prefs` for that peer.
+
+4) Encrypting a message before sending
+- When you tap send, `ChatActivity.prepareAndSendMessage(...)` makes sure the shared secret exists.
+- `SignalManager.encrypt(...)` transforms the shared secret into an AES key with an HKDF-like HMAC-SHA256 step.
+- The app generates a random 12-byte IV.
+- It encrypts the plaintext with AES/GCM.
+- It combines `IV + ciphertext`, Base64-encodes the result, and sends that ciphertext to the backend.
+
+5) Decrypting a received message
+- When a new message is fetched or received over WebSocket, the app looks up the cached shared secret for that peer.
+- `SignalManager.decrypt(...)` decodes the Base64 ciphertext, extracts the IV, derives the same AES key from the shared secret, and decrypts with AES/GCM.
+- If the current derivation fails, the code falls back to a legacy AES-key path so older stored messages can still be read.
+
+6) What the backend stores
+- The backend stores ciphertext, not plaintext, for chat messages.
+- The app only decrypts on the device after the message is fetched.
+
+Keys actually used in the live chat encryption path
+- `identity private key` and the peer’s `public key` are used to create the shared secret.
+- The `shared secret` is used to derive the AES message key.
+- The random `IV` is used for AES/GCM during each message encryption.
+- `signed prekey`, `one-time prekeys`, `registration id`, and `device id` are part of the account/key bundle setup, but they are not the direct per-message encryption key in the current chat flow.
 
 -----------------------------
 
