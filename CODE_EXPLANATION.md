@@ -9,13 +9,28 @@ Notes about this document
 - This file summarizes every Java source file under `app/src/main/java` in this project.
 - For each class I provide: a short overview, then method-by-method explanations. For larger methods I explain the purpose of important code blocks line-by-line.
 - I focused on explaining behavior, data flow (network, storage, crypto), and any non-obvious decisions (fallbacks, error handling, caching).
+- The crypto notes below reflect the current code base, including account-bound identity keys, encrypted private-key backup, shared-secret caching, and the AES-GCM message layer.
+
+Encryption and key management overview
+- Identity keys: the app uses X25519 identity key pairs. In the current code, the identity pair is generated with `SignalManager.generateAccountBoundKeyPair(username, password)`, which makes the identity key deterministic for the same account credentials.
+- How the deterministic seed is made: `SignalManager.deriveAccountSeed()` normalizes the username, uses the password as input, and runs PBKDF2WithHmacSHA256 with a username-based salt (`"com.example.myapplication.identity:" + username`) and 120,000 iterations.
+- What gets uploaded to the server: registration and key upload send the identity public key, signed prekey, one-time prekeys, registration id, device id, and optionally an encrypted copy of the identity private key.
+- Private-key backup: the identity private key can be encrypted with a password-derived AES key using AES/GCM and stored in the `encrypted_identity_private_key` field. This lets a user restore the same account identity on another device.
+- Shared secret for chats: for each peer, the app derives a shared secret with X25519 KeyAgreement between the local identity private key and the peer’s public key. That secret is saved in `Prefs` as Base64 under a peer-specific key.
+- Message encryption: actual chat messages are encrypted with AES/GCM. The AES key is derived from the shared secret using an HKDF-like HMAC-SHA256 step with a fixed info string. The random IV is prepended to the ciphertext and the result is Base64-encoded.
+- Which keys are used where:
+  - `identity private key` + `peer public key` -> shared secret
+  - `shared secret` -> message AES key
+  - `signed prekey` and `one-time prekeys` -> server-side key bundle / secure setup material, not the per-message encryption key
+  - `registration id` and `device id` -> metadata for backend/device tracking
+- Compatibility note: decryption first tries the current HKDF-derived AES key and then falls back to a legacy key-derivation path so older stored messages can still be read.
 
 -----------------------------
 
 ## com.example.myapplication.MainActivity.java
 
 Overview
-- Main UI that lists conversations (chats). Loads friends and chats from the backend, maintains local mappings, and supports searching, auto-refresh, deleting chats, and navigation into `ChatActivity`.
+- Main UI that lists conversations (chats). Loads friends and chats from the backend, maintains local mappings, derives missing shared secrets when possible, and supports searching, auto-refresh, deleting chats, and navigation into `ChatActivity`.
 
 Fields (short):
 - `recyclerView`, `adapter` : UI list of conversations.
@@ -52,7 +67,7 @@ Key methods and explanations
 - loadData()
   - Reads stored token and user id from `Prefs`. If not present, returns early.
   - Calls API `getFriends(token, userId)` asynchronously with Retrofit.
-    - On success: stores `friendsList`, updates `friendNames` map, and—if a friend's public key exists and no shared secret is stored—computes a shared secret using `SignalManager.computeSharedSecret` and saves it in `Prefs` (Base64 encoded). This is done inside a try/catch to avoid crashing on crypto errors.
+    - On success: stores `friendsList`, updates `friendNames` map, and—if a friend's public key exists and no shared secret is stored—computes a shared secret using the local identity private key plus the friend's public key, then saves it in `Prefs` (Base64 encoded). This is done inside a try/catch to avoid crashing on crypto errors.
     - On failure: continues to `fetchChats()` to attempt loading chats anyway.
 
 - fetchChats()
@@ -67,7 +82,7 @@ Key methods and explanations
 - fetchLastMessage(Conversation conv)
   - Requests the most recent message (limit=1) for the chat via `getMessages` API.
   - If a message is returned, sets `conv.lastMessage` to the ciphertext and `lastMessageTime` to the created_at timestamp and calls `sortAndDisplayChats()` so UI updates when last-message data arrives.
-  - Important: messages are stored as ciphertext; decryption occurs later when the adapter renders the message (ConversationsAdapter decrypts when secret present).
+  - Important: the list stores ciphertext as received from the backend; decryption happens later in `ConversationsAdapter` if a shared secret is available for that peer.
 
 - sortAndDisplayChats()
   - Sorts `chatConversations` by `lastMessageTime` descending (newest first). Handles null timestamps safely by treating null as older.
@@ -85,6 +100,7 @@ Key methods and explanations
 Notes and caveats
 - Crypto: `loadData()` attempts to derive and cache shared secrets when the friends' public_key is available. The app stores shared secrets via `Prefs`.
 - UI updates are mostly asynchronous: data is loaded in background Retrofit callbacks and adapter is updated accordingly.
+- Search mode is intentionally kept separate from the auto-refresh cycle so a live refresh does not overwrite a filtered result list while the user is typing.
 
 -----------------------------
 
@@ -104,8 +120,8 @@ onBindViewHolder(holder, position)
 - Sets name text view to `conversation.getContactName()`.
 - Decryption logic (important):
   - Gets `lastMsg` ciphertext and `targetUserId`.
-  - Obtains Base64 shared secret string from `Prefs` for that `targetUserId`.
-  - If secret is present and last message is a non-empty ciphertext (and not the placeholders "No messages yet" / "Tap to chat") it decodes the secret and calls `SignalManager.decrypt(lastMsg, secret)` inside try/catch. If decryption fails, shows "[Encrypted Message]" as a fallback.
+  - Obtains the Base64 shared secret string from `Prefs` for that `targetUserId`.
+  - If the secret is present and the last message is a non-empty ciphertext (and not the placeholders "No messages yet" / "Tap to chat") it decodes the shared secret and calls `SignalManager.decrypt(lastMsg, secret)` inside try/catch. If decryption fails, shows "[Encrypted Message]" as a fallback.
 - Sets time and style on the views and uses `ProfileUtils.loadProfilePicture` to asynchronously set the avatar.
 - Registers click and long-click handlers to call the provided listener interfaces.
 
@@ -117,7 +133,7 @@ Notes
 ## com.example.myapplication.LoginActivity.java
 
 Overview
-- Handles user login flow. If token and user info already exist, it navigates to main screen. Otherwise it authenticates and fetches the user profile. When no identity keys are present, it generates keys and uploads the key bundle.
+- Handles user login flow. If token and user info already exist, it navigates to the main screen. Otherwise it authenticates, fetches the user profile, and then either restores the account-bound identity key from an encrypted backup or generates a fresh account-bound key pair.
 
 Key methods
 
@@ -134,22 +150,35 @@ Key methods
 - fetchUserProfile(token)
   - Calls `getMe` endpoint with bearer token to retrieve user record.
   - On success: saves `userId` and `username` in Prefs.
-    - If identity keys are absent on device (`Prefs.getIdentityPubKey()` == null), calls `initializeKeysAndGoToMain(token, userId)` to generate device keys and upload them.
-    - Otherwise navigates to Main.
+    - If identity keys are absent on device (`Prefs.getIdentityPubKey()` == null), it tries to restore the identity private key from the server-side encrypted backup by calling `fetchEncryptedKeysAndInitialize(token, userId, username, password)`.
+    - If a backup cannot be restored, it generates a fresh account-bound identity key pair with `initializeKeysAndGoToMain(token, userId, username, password)`.
+    - If identity keys already exist, it simply navigates to Main.
   - On failure: clears Prefs and re-shows login layout (defensive reset).
 
-- initializeKeysAndGoToMain(token, userId)
-  - Generates Identity Key pair via `SignalManager.generateKeyPair()` and saves them.
-  - Generates a pseudo registration id (random 4-digit-ish number) and saves it.
-  - Generates a signed prekey pair and saves it.
-  - Generates a list of one-time prekeys with `SignalManager.generateOneTimePrekeys(10)`.
-  - Builds `KeyBundleRequest` and uploads keys via `uploadKeys` endpoint. On response (success or failure) it proceeds to `goToMain()`; key upload failures do not block navigation (app treats keys as best-effort).
+- fetchEncryptedKeysAndInitialize(token, userId, username, password)
+  - Fetches the account's key bundle from the backend.
+  - If the bundle contains `encrypted_identity_private_key`, it decrypts that blob using `SignalManager.decryptIdentityPrivateKey(...)` with the username and password.
+  - If decryption succeeds, it restores the identity key pair in `Prefs` and then calls `initializeNewDeviceKeysAndUpload(token, userId)` to create a fresh signed prekey and one-time prekeys for this device.
+  - If decryption fails or there is no backup blob, it falls back to generating a new identity key pair.
+
+- initializeNewDeviceKeysAndUpload(token, userId)
+  - Used after a successful restore from backup. Keeps the account identity key but generates new device-specific keys.
+  - Creates a new registration id, a new signed prekey pair, and 10 one-time prekeys.
+  - Uploads the new bundle to the backend and then proceeds to the main screen regardless of upload success.
+
+- initializeKeysAndGoToMain(token, userId, username, password)
+  - Generates an account-bound identity key pair using `SignalManager.generateAccountBoundKeyPair(username, password)`.
+  - Saves the public/private identity key pair in `Prefs`.
+  - Generates a registration id, signed prekey, and one-time prekeys.
+  - Encrypts the identity private key for backup with `SignalManager.encryptIdentityPrivateKey(...)` using the same username/password-derived key material.
+  - Builds `KeyBundleRequest` with the optional backup blob and uploads the full bundle to the backend. On response (success or failure) it proceeds to `goToMain()`; upload failures do not block navigation.
 
 - goToMain()
   - Starts `MainActivity` and finishes `LoginActivity`.
 
 Notes
-- Key generation is wrapped in try/catch and any exception leads to logging and continuing to main screen.
+- Key generation is wrapped in try/catch and any exception leads to logging and continuing to the main screen.
+- This activity is the place where the app decides whether the device should create a fresh identity or reuse the same account-bound identity from encrypted backup.
 
 -----------------------------
 
@@ -231,10 +260,10 @@ Key helper functions
   - Uses `SignalManager.computeSharedSecret` with the local identity private key and the peer's public key, then saves the Base64 secret in `Prefs` for later use.
 
 - fetchPeerIdentityAndCacheSecret(peerUserId, onReady, onFailure)
-  - Tries to fetch the peer's public key from endpoint `/api/users/{user_id}/public-key`; if successful, derives shared secret. On failure falls back to `getKeyBundle`.
+  - Tries to fetch the peer's public key from endpoint `/api/users/{user_id}/public-key`; if successful, derives the shared secret immediately. On failure it falls back to `getKeyBundle`.
 
 - fetchPeerBundleAndCacheSecret(peerUserId, onReady, onFailure)
-  - Calls `/api/users/{user_id}/bundle` to fetch the key bundle that may contain identity key and attempts to derive the secret.
+  - Calls `/api/users/{user_id}/bundle` to fetch the key bundle that may contain the identity public key and attempts to derive the secret.
 
 - ensureSharedSecretForPeer(peerUserId, onReady, onFailure)
   - Checks `Prefs` for existing shared secret; if present immediately calls `onReady`, otherwise triggers the fetch/derive flow to obtain it.
@@ -253,7 +282,7 @@ Key helper functions
   - Uses `SignalManager.encrypt` to produce ciphertext. If `chatId` is null (no existing chat), calls `createChatAndSendCiphertext` to create a chat then send. Otherwise calls `sendCiphertext`.
 
 - decryptSafely(peerUserId, ciphertext)
-  - Fetches secret from `Prefs`, logs helpful debug entries, attempts `SignalManager.decrypt`. On failure returns token strings such as "[Encrypted Message]" or "[Decryption Error]".
+  - Fetches the peer secret from `Prefs`, logs helpful debug entries, and attempts `SignalManager.decrypt`. On failure it returns token strings such as "[Encrypted Message]" or "[Decryption Error]".
 
 - handleNewMessage(MessageResponse res)
   - If message id has not been loaded, determines whether message is from me, resolves peer id, marks as read for inbound messages, ensures shared secret then decrypts or shows fallback encrypted text. Adds to `messageList`, updates adapter and scrolls to bottom.
@@ -289,8 +318,10 @@ Key helper functions
   - `onPause` removes poll callbacks and closes websocket with normal close code.
 
 Notes and security cues
-- Decryption is attempted with a dual strategy in `SignalManager.decrypt`: first HKDF-derived AES key (new messages), then legacy method (first 16 bytes) for older messages; both use AES-GCM.
-- Shared secret derivation uses X25519 KeyAgreement in `SignalManager.computeSharedSecret` and a more advanced `computeX3DHSharedSecret` helper is implemented for X3DH-style operations.
+- Decryption is attempted with a dual strategy in `SignalManager.decrypt`: first the HKDF-derived AES key (current messages), then the legacy method (first 16 bytes of the shared secret) for older messages; both use AES-GCM.
+- Shared secret derivation uses X25519 KeyAgreement in `SignalManager.computeSharedSecret`.
+- The helper `computeX3DHSharedSecret(...)` exists for a more advanced multi-DH flow, but the main chat flow currently uses the direct X25519 shared-secret path.
+- The chat screen encrypts message text before sending it to the backend; the backend stores ciphertext, not plaintext.
 
 -----------------------------
 
@@ -340,13 +371,17 @@ Overview
 ## com.example.myapplication.RegisterActivity.java
 
 Overview
-- Handles new user registration. Generates identity keys locally, registers the user with identity public key included in the registration request, then logs in and uploads the key bundle.
+- Handles new user registration. Generates an account-bound identity key locally, registers the user with the identity public key included in the registration request, then logs in and uploads the full key bundle.
 
 Key steps
-- onCreate: reads username/password, validates non-empty, generates identity keys, saves them in `Prefs`, creates an `AuthRequest` that includes the public key, and calls register endpoint.
+- onCreate: reads username/password, validates non-empty, generates account-bound identity keys, saves them in `Prefs`, creates an `AuthRequest` that includes the public key, and calls the register endpoint.
 - On successful registration, calls `loginAfterRegister` which logs in and on success calls `fetchUserProfile(token)`.
 - fetchUserProfile then saves user id and username and calls `uploadKeyBundle`.
-- uploadKeyBundle generates signed prekey and OTP prekeys and posts them to `/api/users/{user_id}/keys`. On success navigates to `MainActivity`, on failure still proceeds (best-effort).
+- uploadKeyBundle generates signed prekey and OTP prekeys, optionally encrypts the identity private key for backup using the same username/password, and posts everything to `/api/users/{user_id}/keys`. On success it navigates to `MainActivity`; on failure it still proceeds (best-effort).
+
+Important code path details
+- The registration flow saves `pendingIdentityKeys`, `pendingRegistrationId`, `pendingUsername`, and `pendingPassword` so the app can build an encrypted backup blob after the backend account is created.
+- If encrypted backup creation fails, registration still succeeds, but future restore on another device may require generating a fresh identity key pair.
 
 -----------------------------
 
@@ -355,6 +390,13 @@ Key steps
 - api/User.java — simple POJO for user id, username, and public_key.
 - api/RetrofitClient.java — Builds Retrofit instance with base `https://secra.top` and an OkHttp client that logs bodies and checks for 401 responses to call `handleUnauthorized()` which clears prefs and starts `LoginActivity`.
 - DTOs: `MessageResponse`, `MessageRequest`, `KeyBundleResponse`, `KeyBundleRequest`, `Chat`, `AuthResponse`, `AuthRequest` — simple POJOs matching backend JSON for requests and responses.
+- `KeyBundleRequest` / `KeyBundleResponse` deserve special mention because they carry the encryption material:
+  - `identity_key`: the X25519 identity public key.
+  - `signed_prekey`: the current signed prekey public key.
+  - `one_time_prekeys`: a list of public one-time prekeys.
+  - `registration_id`: registration metadata for the backend.
+  - `device_id`: device label such as `android-<model>`.
+  - `encrypted_identity_private_key`: optional encrypted backup blob used when restoring an account on a new device.
 - api/ApiService.java — Retrofit service interface describing all HTTP endpoints used by the app (auth, users, chats, messages, profile pictures, delete endpoints, key upload endpoints, etc.).
 
 -----------------------------
@@ -378,7 +420,7 @@ Overview
 - Centralized storage for sensitive settings using `EncryptedSharedPreferences` when available, falling back to plain `SharedPreferences`.
 
 Keys stored
-- auth token, user id, username, identity keys, signed prekey, registration id, and multiple `shared_secret_{userId}` entries.
+- auth token, user id, username, identity keys, signed prekey, registration id, dark mode setting, and multiple `shared_secret_{userId}` entries.
 
 Important methods
 - init(context): creates `EncryptedSharedPreferences` using `MasterKey` with AES256; on exception falls back to standard `SharedPreferences`.
@@ -389,29 +431,36 @@ Important methods
 - saveSharedSecret/getSharedSecret: per-peer shared secret storage keyed by user id.
 - clear(): wipes all stored entries.
 - clearSessionOnly(): removes token, user id, username but keeps device keys and shared secrets.
+- setCurrentUser(userId): prefixes user-scoped keys with the active user id so multiple accounts can coexist on one device without overwriting each other’s cryptographic material.
 
 Security note
-- `EncryptedSharedPreferences` is used when possible which encrypts keys and values; the code gracefully degrades to unencrypted storage on exception.
+- `EncryptedSharedPreferences` is used when possible, with an AES256-GCM master key and AES256-SIV/AES256-GCM wrapping for keys and values. If initialization fails, the code gracefully degrades to unencrypted storage, which is functional but less secure.
 
 -----------------------------
 
 ## com.example.myapplication.util.SignalManager.java
 
 Overview
-- Cryptographic helper utilities. Implements key generation (X25519), shared secret computation (KeyAgreement), encryption and decryption using AES-GCM, HKDF-like KDF to produce AES keys, and a simplified X3DH-style combination for multi-DH key derivation.
+- Cryptographic helper utilities. Implements X25519 key generation, deterministic account-bound key derivation, encrypted private-key backup/restore, shared secret computation, AES-GCM message encryption/decryption, an HKDF-like KDF, and a simplified X3DH-style combination for multi-DH key derivation.
 
 Key pieces
-- generateKeyPair(): uses `KeyPairGenerator` for X25519, returns base64-encoded public/private bytes.
+- generateKeyPair(): uses `KeyPairGenerator` for X25519 and returns Base64-encoded public/private bytes.
+- generateAccountBoundKeyPair(username, password): derives a deterministic seed from the account credentials and constructs an X25519 keypair from that seed so the same account can be restored on another device.
+- deriveAccountSeed(username, password): uses PBKDF2WithHmacSHA256 with a username-based salt and 120,000 iterations to produce 32 bytes of seed material.
+- encryptIdentityPrivateKey(identityPrivateKeyB64, username, password): encrypts the identity private key with a password-derived AES key, using AES/GCM with a random 12-byte IV. The output is Base64(iv || ciphertext).
+- decryptIdentityPrivateKey(encryptedKeyB64, username, password): reverses the above process and returns the restored Base64 private key.
 - generateOneTimePrekeys(count): helper to create a list of public keys used as one-time prekeys.
-- deriveAESKeyHKDF(sharedSecret): custom HKDF-like extract/expand using HMAC-SHA256 to derive a 16-byte AES key. Note: it uses an all-zero salt and a fixed info string "AES_ENCRYPTION_KEY".
-- deriveAESKeyLegacy(sharedSecret): compatibility path that truncates the shared secret's first 16 bytes — used for decrypting legacy server messages.
-- encrypt(plaintext, sharedSecret): derives key via HKDF, generates a random 12-byte IV, encrypts with AES-GCM, and returns Base64(iv || ciphertext).
-- decrypt(base64Ciphertext, sharedSecret): attempts HKDF-derived key decryption first; if it fails, attempts legacy key decryption. If both fail it throws the original exception.
-- computeSharedSecret(privateKeyStr, publicKeyStr): uses X25519 KeyAgreement to derive raw shared secret bytes.
-- computeX3DHSharedSecret(...): demonstrates combining multiple ECDH outputs (DH1, DH2, optional DH3) and applying an HMAC-SHA256 KDF to produce a combined secret — useful when implementing X3DH-style initial handshakes.
+- deriveAESKeyHKDF(sharedSecret): custom HKDF-like extract/expand using HMAC-SHA256 to derive a 16-byte AES key. It uses an all-zero salt and the fixed info string `AES_ENCRYPTION_KEY`.
+- deriveAESKeyLegacy(sharedSecret): compatibility path that truncates the shared secret's first 16 bytes — used for decrypting older server messages.
+- encrypt(plaintext, sharedSecret): derives the AES key from the shared secret, generates a random 12-byte IV, encrypts with AES-GCM, and returns Base64(iv || ciphertext).
+- decrypt(base64Ciphertext, sharedSecret): attempts HKDF-derived key decryption first; if it fails, attempts legacy key decryption. If both fail, it rethrows the HKDF exception.
+- computeSharedSecret(privateKeyStr, publicKeyStr): uses X25519 KeyAgreement to derive the raw shared secret bytes from the local private key and peer public key.
+- computeX3DHSharedSecret(...): combines multiple ECDH outputs (DH1, DH2, optional DH3) and applies an HMAC-SHA256 KDF to produce a combined secret. This helper is implemented, but the main chat flow currently uses the simpler X25519 shared-secret path.
 
 Security notes
-- AES-GCM with a 12-byte IV and 128-bit tag is used (standard). The HKDF implementation is simplified and uses a zero salt; for production, a random salt and a standard HKDF implementation would be preferable.
+- AES-GCM with a 12-byte IV and 128-bit tag is used for both message encryption and encrypted identity-backup storage.
+- The HKDF implementation is simplified and uses a zero salt; for production, a standard HKDF implementation and stronger key lifecycle separation would be preferable.
+- The account-bound identity key generation is intentional: it makes identity restoration possible, but it also means the username/password pair directly influences the key material.
 
 -----------------------------
 

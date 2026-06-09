@@ -41,7 +41,7 @@ public class RetrofitClient {
     }
 
     private static void handleUnauthorized() {
-        Prefs.clear();
+       Prefs.clear();
         Intent intent = new Intent(MyApplication.getInstance(), LoginActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         MyApplication.getInstance().startActivity(intent);
