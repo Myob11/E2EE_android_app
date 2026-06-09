@@ -1,6 +1,7 @@
 package com.example.myapplication;
 
 import android.content.Intent;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -8,6 +9,7 @@ import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
@@ -74,6 +76,8 @@ public class MainActivity extends AppCompatActivity implements
             if (hasFocus) {
                 isSearching = true;
                 performSearch("");
+            } else if (searchView.getQuery().length() == 0) {
+                exitSearchMode();
             }
         });
 
@@ -96,12 +100,7 @@ public class MainActivity extends AppCompatActivity implements
         int closeButtonId = searchView.getContext().getResources().getIdentifier("android:id/search_close_btn", null, null);
         View closeButton = searchView.findViewById(closeButtonId);
         if (closeButton != null) {
-            closeButton.setOnClickListener(v -> {
-                searchView.setQuery("", false);
-                searchView.clearFocus();
-                isSearching = false;
-                adapter.updateData(chatConversations);
-            });
+            closeButton.setOnClickListener(v -> exitSearchMode());
         }
 
         // Set up auto-refresh runnable
@@ -119,6 +118,14 @@ public class MainActivity extends AppCompatActivity implements
                 refreshHandler.postDelayed(this, REFRESH_INTERVAL);
             }
         };
+    }
+
+    private void exitSearchMode() {
+        SearchView searchView = findViewById(R.id.searchView);
+        searchView.setQuery("", false);
+        searchView.clearFocus();
+        isSearching = false;
+        adapter.updateData(chatConversations);
     }
 
     // Filters friends by username and shows matching chat placeholders.
@@ -316,6 +323,9 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     // Opens the selected chat screen.
     public void onConversationClick(Conversation conversation) {
+        if (isSearching) {
+            exitSearchMode();
+        }
         Intent intent = new Intent(this, ChatActivity.class);
         intent.putExtra("chatId", conversation.getChatId());
         intent.putExtra("targetUserId", conversation.getTargetUserId());
@@ -422,6 +432,32 @@ public class MainActivity extends AppCompatActivity implements
             adapter.updateData(chatConversations);
         }
         Toast.makeText(MainActivity.this, "Chat deleted", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            if (isSearching) {
+                SearchView searchView = findViewById(R.id.searchView);
+                if (searchView != null) {
+                    Rect outRect = new Rect();
+                    searchView.getGlobalVisibleRect(outRect);
+                    if (!outRect.contains((int) ev.getRawX(), (int) ev.getRawY())) {
+                        exitSearchMode();
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (isSearching) {
+            exitSearchMode();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     @Override
