@@ -354,6 +354,8 @@ public class ChatActivity extends AppCompatActivity {
             return SignalManager.decrypt(ciphertext, keyBytes);
         } catch (Exception e) {
             Log.e(TAG, "Decryption failed", e);
+            Prefs.removeSharedSecret(peerUserId);
+            Log.w(TAG, "Removed cached shared secret for " + peerUserId + " after decrypt failure");
 
             Log.e("CryptoDebug", "FAIL: Check if key or ciphertext above was modified/truncated.");
 

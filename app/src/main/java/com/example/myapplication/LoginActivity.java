@@ -88,15 +88,25 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
-     // Loads the account profile and decides whether to restore or create keys.
-     private void fetchUserProfile(String token, String username, String password) {
-         RetrofitClient.getApiService().getMe("Bearer " + token).enqueue(new Callback<User>() {
-             @Override
-             public void onResponse(Call<User> call, Response<User> response) {
-                 if (response.isSuccessful() && response.body() != null) {
-                     Prefs.setCurrentUser(response.body().getId());
-                     Prefs.saveUserId(response.body().getId());
-                     Prefs.saveUsername(response.body().getUsername());
+    private void fetchUserProfile(String token) {
+        RetrofitClient.getApiService().getMe("Bearer " + token).enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    Prefs.saveUserId(response.body().getId());
+                    Prefs.saveUsername(response.body().getUsername());
+                    
+                    // Check if keys exist on this device, if not generate and upload
+                    if (Prefs.getIdentityPubKey() == null) {
+                        initializeKeysAndGoToMain(token, response.body().getId());
+                    } else {
+                        goToMain();
+                    }
+                } else {
+                    Prefs.clearSessionOnly();
+                    setContentView(R.layout.activity_login);
+                }
+            }
 
                      // Check if keys exist on this device, if not try to restore from backup
                      if (Prefs.getIdentityPubKey() == null) {
