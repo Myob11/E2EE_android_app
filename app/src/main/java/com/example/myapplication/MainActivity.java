@@ -76,8 +76,12 @@ public class MainActivity extends AppCompatActivity implements
             if (hasFocus) {
                 isSearching = true;
                 performSearch("");
-            } else if (searchView.getQuery().length() == 0) {
-                exitSearchMode();
+            } else {
+                v.postDelayed(() -> {
+                    if (isSearching && !searchView.hasFocus()) {
+                        exitSearchMode();
+                    }
+                }, 200);
             }
         });
 
@@ -121,11 +125,18 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     private void exitSearchMode() {
-        SearchView searchView = findViewById(R.id.searchView);
-        searchView.setQuery("", false);
-        searchView.clearFocus();
+        if (!isSearching) return;
         isSearching = false;
-        adapter.updateData(chatConversations);
+        
+        SearchView searchView = findViewById(R.id.searchView);
+        if (searchView != null) {
+            searchView.setQuery("", false);
+            searchView.clearFocus();
+        }
+        
+        if (adapter != null) {
+            adapter.updateData(chatConversations);
+        }
     }
 
     // Filters friends by username and shows matching chat placeholders.
@@ -323,14 +334,15 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     // Opens the selected chat screen.
     public void onConversationClick(Conversation conversation) {
-        if (isSearching) {
-            exitSearchMode();
-        }
         Intent intent = new Intent(this, ChatActivity.class);
         intent.putExtra("chatId", conversation.getChatId());
         intent.putExtra("targetUserId", conversation.getTargetUserId());
         intent.putExtra("contactName", conversation.getContactName());
         startActivity(intent);
+
+        if (isSearching) {
+            exitSearchMode();
+        }
     }
 
     @Override
@@ -439,11 +451,21 @@ public class MainActivity extends AppCompatActivity implements
         if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             if (isSearching) {
                 SearchView searchView = findViewById(R.id.searchView);
-                if (searchView != null) {
-                    Rect outRect = new Rect();
-                    searchView.getGlobalVisibleRect(outRect);
-                    if (!outRect.contains((int) ev.getRawX(), (int) ev.getRawY())) {
-                        exitSearchMode();
+                RecyclerView recyclerView = findViewById(R.id.recyclerViewConversations);
+                if (searchView != null && recyclerView != null) {
+                    Rect searchRect = new Rect();
+                    searchView.getGlobalVisibleRect(searchRect);
+                    
+                    if (!searchRect.contains((int) ev.getRawX(), (int) ev.getRawY())) {
+                        int[] location = new int[2];
+                        recyclerView.getLocationOnScreen(location);
+                        float x = ev.getRawX() - location[0];
+                        float y = ev.getRawY() - location[1];
+                        View child = recyclerView.findChildViewUnder(x, y);
+                        
+                        if (child == null) {
+                            exitSearchMode();
+                        }
                     }
                 }
             }
