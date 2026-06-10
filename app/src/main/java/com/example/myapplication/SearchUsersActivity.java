@@ -28,10 +28,17 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
     private List<User> userList = new ArrayList<>();
     private Set<String> existingFriendIds = new HashSet<>();
 
+    // Sets up the user search screen and search listeners.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_search_users);
+
+        // Ensure currentUserId is set for proper namespacing of user-scoped preferences
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
 
         Toolbar toolbar = findViewById(R.id.searchToolbar);
         setSupportActionBar(toolbar);
@@ -66,6 +73,7 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
         });
     }
 
+    // Loads existing friends so they can be excluded from search results.
     private void fetchExistingFriends() {
         String token = "Bearer " + Prefs.getToken();
         String userId = Prefs.getUserId();
@@ -86,6 +94,7 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
         });
     }
 
+    // Searches for users and filters out self and current friends.
     private void searchUsers(String query) {
         String token = "Bearer " + Prefs.getToken();
         String currentUserId = Prefs.getUserId();
@@ -113,6 +122,7 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
     }
 
     @Override
+    // Sends the friend request and removes the user from results on success.
     public void onAddFriendClick(User user) {
         String token = "Bearer " + Prefs.getToken();
         String currentUserId = Prefs.getUserId();
@@ -142,6 +152,7 @@ public class SearchUsersActivity extends AppCompatActivity implements UsersAdapt
     }
 
     @Override
+    // Returns to the previous screen from the toolbar back button.
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;

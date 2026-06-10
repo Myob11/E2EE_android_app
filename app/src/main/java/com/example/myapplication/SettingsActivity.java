@@ -1,10 +1,6 @@
 package com.example.myapplication;
 
-import static androidx.core.content.ContextCompat.startActivity;
-
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -12,46 +8,44 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.EditText;
-import android.content.DialogInterface;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
+
 import com.example.myapplication.api.RetrofitClient;
 import com.example.myapplication.util.Prefs;
 import com.example.myapplication.util.ProfileUtils;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-import android.widget.Button;
-import androidx.core.content.ContextCompat;
-import androidx.appcompat.app.AlertDialog; // if not already imported
-
 
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String TAG = "SettingsActivityDebug";
     private static final int PICK_IMAGE_REQUEST = 1;
+    
     private ImageView imageViewAvatar;
     private SwitchCompat switchTheme;
-    private SwitchCompat switchOnlineIndicator;
-    private SwitchCompat switchAutoDownload;
     private TextView textViewUsernameDisplay;
     private Button buttonSwitchAccount;
     private Button buttonDeleteProfile;
 
+    // Applies the system bar styling used by the settings screen.
     private void applyStatusBar() {
         Window window = getWindow();
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
@@ -59,11 +53,18 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Sets up theme controls, profile picture actions, and account options.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        setContentView(R.layout.activity_settings);
+        // Ensure currentUserId is set for proper namespacing of user-scoped preferences
+        // This is critical for account-bound encryption on shared devices
+        String userId = Prefs.getUserId();
+        if (userId != null) {
+            Prefs.setCurrentUser(userId);
+        }
 
+        setContentView(R.layout.activity_settings);
         applyStatusBar();
 
         Toolbar toolbar = findViewById(R.id.settingsToolbar);
@@ -74,30 +75,24 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         imageViewAvatar = findViewById(R.id.imageViewAvatar);
-
         switchTheme = findViewById(R.id.switchTheme);
-// Read saved preference and set switch state
-        boolean isDark = Prefs.isDarkMode();
-        switchTheme.setChecked(isDark);
-
-        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Prefs.saveThemeMode(isChecked);
-            AppCompatDelegate.setDefaultNightMode(
-                    isChecked ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
-            );
-            applyStatusBar();
-        });
-        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            Prefs.saveThemeMode(isChecked);
-            AppCompatDelegate.setDefaultNightMode(
-                    isChecked ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
-            );
-            applyStatusBar();
-            recreate();  // Add this line
-        });
-
         textViewUsernameDisplay = findViewById(R.id.textViewUsernameDisplay);
         buttonSwitchAccount = findViewById(R.id.buttonSwitchAccount);
+        buttonDeleteProfile = findViewById(R.id.buttonDeleteProfile);
+
+        // Theme Switch Logic
+        boolean isDark = Prefs.isDarkMode();
+        switchTheme.setChecked(isDark);
+        switchTheme.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked != Prefs.isDarkMode()) {
+                Prefs.saveThemeMode(isChecked);
+                AppCompatDelegate.setDefaultNightMode(
+                        isChecked ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
+                );
+                applyStatusBar();
+                recreate(); 
+            }
+        });
 
         String username = Prefs.getUsername();
         if (username != null) {
@@ -106,7 +101,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         ProfileUtils.loadProfilePicture(this, username, imageViewAvatar);
 
-        // Long press on avatar to show upload prompt
+        // Profile Picture Upload
         imageViewAvatar.setOnLongClickListener(v -> {
             AlertDialog avatarDialog = new AlertDialog.Builder(this)
                     .setTitle("Profile Picture")
@@ -118,9 +113,9 @@ public class SettingsActivity extends AppCompatActivity {
             return true;
         });
 
-
-
+        // Switch Account Logic
         buttonSwitchAccount.setOnClickListener(v -> {
+            // Preserves namespaced keys of current user but clears active session
             Prefs.clearSessionOnly();
             Intent intent = new Intent(SettingsActivity.this, LoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -128,10 +123,10 @@ public class SettingsActivity extends AppCompatActivity {
             finish();
         });
 
-        buttonDeleteProfile = findViewById(R.id.buttonDeleteProfile);
         buttonDeleteProfile.setOnClickListener(v -> showDeleteConfirmationDialog());
     }
 
+    // Asks the user to type DELETE before deleting the account.
     private void showDeleteConfirmationDialog() {
         EditText input = new EditText(this);
         input.setHint("Type DELETE to confirm");
@@ -152,19 +147,9 @@ public class SettingsActivity extends AppCompatActivity {
                 .show();
         tintDialogButtons(confirmDialog);
     }
-    private void tintDialogButtons(AlertDialog dialog) {
-        if (dialog == null) return;
-        int color = ContextCompat.getColor(this, R.color.dialog_button_text);
-        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
-        Button neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-        if (positive != null) positive.setTextColor(color);
-        if (negative != null) negative.setTextColor(color);
-        if (neutral != null) neutral.setTextColor(color);
-    }
 
+    // Calls the backend to delete the current account.
     private void performAccountDeletion() {
-        // Show a simple non-cancelable progress dialog
         AlertDialog progress = new AlertDialog.Builder(this)
                 .setTitle("Deleting account")
                 .setMessage("Please wait while your account is being deleted...")
@@ -178,12 +163,11 @@ public class SettingsActivity extends AppCompatActivity {
             public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
                 progress.dismiss();
                 if (response.isSuccessful()) {
-                    // Show success and navigate to login
                     AlertDialog deletedDialog = new AlertDialog.Builder(SettingsActivity.this)
                             .setTitle("Account Deleted")
                             .setMessage("Your account has been deleted successfully.")
                             .setPositiveButton("OK", (dialog, which) -> {
-                                Prefs.clear();
+                                Prefs.clear(); // Complete wipe as account is gone
                                 Intent intent = new Intent(SettingsActivity.this, LoginActivity.class);
                                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                                 startActivity(intent);
@@ -193,19 +177,29 @@ public class SettingsActivity extends AppCompatActivity {
                             .show();
                     tintDialogButtons(deletedDialog);
                 } else {
-                    String err = "Failed to delete account (" + response.code() + ")";
-                    Toast.makeText(SettingsActivity.this, err, Toast.LENGTH_LONG).show();
+                    Toast.makeText(SettingsActivity.this, "Failed to delete account", Toast.LENGTH_LONG).show();
                 }
             }
 
             @Override
             public void onFailure(Call<Map<String, Object>> call, Throwable t) {
                 progress.dismiss();
-                Toast.makeText(SettingsActivity.this, "Network error while deleting account", Toast.LENGTH_LONG).show();
+                Toast.makeText(SettingsActivity.this, "Network error", Toast.LENGTH_LONG).show();
             }
         });
     }
 
+    // Matches dialog button colors to the app theme.
+    private void tintDialogButtons(AlertDialog dialog) {
+        if (dialog == null) return;
+        int color = ContextCompat.getColor(this, R.color.dialog_button_text);
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        if (positive != null) positive.setTextColor(color);
+        if (negative != null) negative.setTextColor(color);
+    }
+
+    // Opens the image picker so the user can choose a profile picture.
     private void openGallery() {
         Intent intent = new Intent();
         intent.setType("image/*");
@@ -214,25 +208,21 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Handles the selected image and starts the upload flow.
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            Uri imageUri = data.getData();
-            Log.d(TAG, "onActivityResult: Image selected. Uri=" + imageUri);
-            uploadProfilePicture(imageUri);
+            uploadProfilePicture(data.getData());
         }
     }
 
+    // Requests an upload URL and uploads the chosen profile image.
     private void uploadProfilePicture(final Uri uri) {
         String username = Prefs.getUsername();
-        if (username == null) {
-            Log.e(TAG, "uploadProfilePicture: Username is null, aborting");
-            return;
-        }
+        if (username == null) return;
 
         String type = getContentResolver().getType(uri);
         final String contentType = (type != null) ? type : "image/jpeg";
-        Log.d(TAG, "uploadProfilePicture: Detected content type=" + contentType);
 
         Toast.makeText(this, "Uploading...", Toast.LENGTH_SHORT).show();
         String token = "Bearer " + Prefs.getToken();
@@ -240,91 +230,70 @@ public class SettingsActivity extends AppCompatActivity {
         Map<String, String> body = new HashMap<>();
         body.put("content_type", contentType);
 
-        Log.d(TAG, "uploadProfilePicture: Requesting upload URL for " + username + " with body=" + body);
         RetrofitClient.getApiService().getUploadUrl(token, username, body).enqueue(new Callback<Map<String, String>>() {
             @Override
             public void onResponse(Call<Map<String, String>> call, Response<Map<String, String>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String uploadUrl = response.body().get("upload_url");
-                    Log.d(TAG, "uploadProfilePicture: SUCCESS. Got upload URL=" + uploadUrl);
-                    performActualUpload(uploadUrl, uri, contentType);
-                } else {
-                    Log.e(TAG, "uploadProfilePicture: FAILED. Code=" + response.code() + ", Body=" + response.body());
-                    Toast.makeText(SettingsActivity.this, "Upload failed (1)", Toast.LENGTH_SHORT).show();
+                    performActualUpload(response.body().get("upload_url"), uri, contentType);
                 }
             }
 
             @Override
             public void onFailure(Call<Map<String, String>> call, Throwable t) {
-                Log.e(TAG, "uploadProfilePicture: NETWORK ERROR getting upload URL", t);
                 Toast.makeText(SettingsActivity.this, "Network error", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
+    // Sends the image bytes to the pre-signed upload URL.
     private void performActualUpload(final String uploadUrl, final Uri uri, final String contentType) {
-        Log.d(TAG, "performActualUpload: Starting PUT request to MinIO. URL=" + uploadUrl);
         try {
             InputStream inputStream = getContentResolver().openInputStream(uri);
-            final byte[] bytes = getBytes(inputStream);
-            Log.d(TAG, "performActualUpload: File read success. Size=" + bytes.length + " bytes");
-            
+            byte[] bytes = getBytes(inputStream);
             RequestBody requestBody = RequestBody.create(MediaType.parse(contentType), bytes);
 
             RetrofitClient.getApiService().uploadImage(uploadUrl, requestBody).enqueue(new Callback<Void>() {
                 @Override
                 public void onResponse(Call<Void> call, Response<Void> response) {
                     if (response.isSuccessful()) {
-                        Log.d(TAG, "performActualUpload: SUCCESS. MinIO upload complete.");
                         markComplete(bytes.length);
-                    } else {
-                        Log.e(TAG, "performActualUpload: FAILED. Code=" + response.code());
-                        Toast.makeText(SettingsActivity.this, "Upload failed (2)", Toast.LENGTH_SHORT).show();
                     }
                 }
 
                 @Override
-                public void onFailure(Call<Void> call, Throwable t) {
-                    Log.e(TAG, "performActualUpload: NETWORK ERROR during MinIO upload", t);
-                }
+                public void onFailure(Call<Void> call, Throwable t) {}
             });
         } catch (Exception e) {
-            Log.e(TAG, "performActualUpload: ERROR reading file from Uri", e);
+            Log.e(TAG, "Error reading file", e);
         }
     }
 
+    // Notifies the backend that the upload finished successfully.
     private void markComplete(int size) {
         final String username = Prefs.getUsername();
         String token = "Bearer " + Prefs.getToken();
         Map<String, Object> body = new HashMap<>();
         body.put("size", size);
 
-        Log.d(TAG, "markComplete: Informing backend upload is finished. Username=" + username + ", size=" + size);
         RetrofitClient.getApiService().markUploadComplete(token, username, body).enqueue(new Callback<Map<String, Object>>() {
             @Override
             public void onResponse(Call<Map<String, Object>> call, Response<Map<String, Object>> response) {
                 if (response.isSuccessful()) {
-                    Log.d(TAG, "markComplete: SUCCESS. Backend acknowledged upload. Response=" + response.body());
                     Toast.makeText(SettingsActivity.this, "Profile picture updated!", Toast.LENGTH_SHORT).show();
                     ProfileUtils.clearCache(username);
                     ProfileUtils.loadProfilePicture(SettingsActivity.this, username, imageViewAvatar);
-                } else {
-                    Log.e(TAG, "markComplete: FAILED. Code=" + response.code() + ", Body=" + response.body());
                 }
             }
 
             @Override
-            public void onFailure(Call<Map<String, Object>> call, Throwable t) {
-                Log.e(TAG, "markComplete: NETWORK ERROR", t);
-            }
+            public void onFailure(Call<Map<String, Object>> call, Throwable t) {}
         });
     }
 
+    // Reads an InputStream into a byte array for upload.
     public byte[] getBytes(InputStream inputStream) throws Exception {
         ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
-        int bufferSize = 1024;
-        byte[] buffer = new byte[bufferSize];
-
+        byte[] buffer = new byte[1024];
         int len;
         while ((len = inputStream.read(buffer)) != -1) {
             byteBuffer.write(buffer, 0, len);
@@ -333,6 +302,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     @Override
+    // Handles the toolbar back button.
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;

@@ -150,10 +150,8 @@ public class Prefs {
     }
 
     /**
-     * Clear only session data (token, user_id, username) while preserving device keys
-     * (identity keys, signed prekey, registration ID) and shared secrets. This ensures
-     * that device keys persist across login/logout cycles and messages encrypted with
-     * old keys can still be decrypted.
+     * Clear only session data (token, user_id, username) while preserving namespaced device keys
+     * and shared secrets. This allows "Switch Account" while keeping cryptographic identities intact.
      */
     public static void clearSessionOnly() {
         sharedPreferences.edit()
@@ -163,6 +161,7 @@ public class Prefs {
                 .apply();
         clearCurrentUser();
     }
+
     public static void saveThemeMode(boolean darkMode) {
         sharedPreferences.edit().putBoolean("dark_mode", darkMode).apply();
     }

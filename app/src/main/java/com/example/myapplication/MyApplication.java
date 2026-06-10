@@ -17,7 +17,7 @@ public class MyApplication extends Application {
         instance = this;
         Prefs.init(this);
 
-// Apply saved theme preference
+        // Applies the saved theme preference at app startup.
         boolean isDark = Prefs.isDarkMode();
         AppCompatDelegate.setDefaultNightMode(
                 isDark ? AppCompatDelegate.MODE_NIGHT_YES : AppCompatDelegate.MODE_NIGHT_NO
